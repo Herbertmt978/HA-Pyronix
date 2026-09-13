@@ -113,7 +113,13 @@ class PanelClient:
         async with self.lock:
             try:
                 async with asyncio.timeout(50):
-                    return await self._transaction(operation, area)
+                    attempts = 2 if operation is None else 1
+                    for attempt in range(attempts):
+                        try:
+                            return await self._transaction(operation, area)
+                        except TimeoutError, aiohttp.ClientError, OSError:
+                            if attempt + 1 == attempts:
+                                raise
             except asyncio.CancelledError:
                 raise
             except AuthenticationError, ProtocolError:

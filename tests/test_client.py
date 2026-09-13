@@ -1,7 +1,9 @@
+import asyncio
 import hashlib
 import json
 from collections import deque
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import aiohttp
 import pytest
@@ -58,6 +60,8 @@ class FakeSocket:
             elif b"<a>" in raw:
                 self.replies.append("<e>b </e>" if self.mode == "busy" else "<e>u </e>")
         elif raw[:1] == b"A":
+            if self.mode == "handshake_timeout":
+                return
             self.replies.append(self.packet("a", b"\x01\x20" + b"12345678"))
         elif raw[:1] == b"B":
             public = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), raw[6:-16])
@@ -109,6 +113,74 @@ class FakeHTTP:
     def ws_connect(self, *args, **kwargs):
         self.connections += 1
         return self.socket
+
+
+class SequencedHTTP:
+    def __init__(self, *sockets):
+        self.sockets = deque(sockets)
+        self.connections = 0
+
+    def ws_connect(self, *args, **kwargs):
+        self.connections += 1
+        return self.sockets.popleft()
+
+
+async def test_status_reconnects_once_after_stalled_handshake_without_actuation():
+    stalled, working = FakeSocket("handshake_timeout"), FakeSocket()
+    http = SequencedHTTP(stalled, working)
+    result = await PanelClient(http, AUTH).query()
+    assert result["areas"][0]["value"] == 0 and http.connections == 2
+    assert stalled.commands == working.commands == []
+
+
+async def test_persistent_status_failure_stops_after_two_connections():
+    http = SequencedHTTP(FakeSocket("handshake_timeout"), FakeSocket("handshake_timeout"))
+    with pytest.raises(ProtocolError, match="unconfirmed"):
+        await PanelClient(http, AUTH).query()
+    assert http.connections == 2
+
+
+@pytest.mark.parametrize("operation", ["arm", "disarm"])
+async def test_controls_do_not_retry_even_a_stalled_preflight(operation):
+    stalled = FakeSocket("handshake_timeout")
+    http = SequencedHTTP(stalled)
+    with pytest.raises(ProtocolError, match="unconfirmed"):
+        await PanelClient(http, AUTH).query(operation, 0)
+    assert http.connections == 1 and stalled.commands == []
+
+
+async def test_rejected_status_credentials_are_not_retried():
+    http = SequencedHTTP(FakeSocket("bad_login"))
+    with pytest.raises(AuthenticationError):
+        await PanelClient(http, AUTH).query()
+    assert http.connections == 1
+
+
+async def test_status_reconnect_shares_one_overall_deadline():
+    class SlowHandshake(FakeSocket):
+        def __init__(self):
+            super().__init__("handshake_timeout")
+            self.cancelled = False
+
+        async def receive(self):
+            if not self.replies:
+                try:
+                    await asyncio.sleep(0.03)
+                except asyncio.CancelledError:
+                    self.cancelled = True
+                    raise
+            return await super().receive()
+
+    first, second = SlowHandshake(), SlowHandshake()
+    http = SequencedHTTP(first, second)
+    original_timeout = asyncio.timeout
+    with patch(
+        "custom_components.pyronix_homecontrol.client.asyncio.timeout",
+        side_effect=lambda limit: original_timeout(limit / 1000),
+    ):
+        with pytest.raises(ProtocolError, match="unconfirmed"):
+            await PanelClient(http, AUTH).query()
+    assert http.connections == 2 and second.cancelled
 
 
 async def test_exact_client_full_handshake_status_and_single_arm():
