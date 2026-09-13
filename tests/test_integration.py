@@ -141,6 +141,26 @@ async def test_unknown_state_is_not_disarmed(hass):
     )
 
 
+@pytest.mark.parametrize("value,status", [(4, "Cannot Set"), (5, "Can Override")])
+async def test_known_blocked_area_stays_disarmed_and_cannot_be_forced(hass, value, status):
+    entry = await setup(hass)
+    data = copy.deepcopy(DATA)
+    data["areas"][0].update(value=value, status=status)
+    entry.runtime_data.async_set_updated_data(data)
+    state = next(
+        s for s in hass.states.async_all("alarm_control_panel") if s.attributes["area_number"] == 0
+    )
+    assert state.state == "disarmed" and state.attributes["panel_status"] == status
+    session = PanelSession("12345678", "fixture")
+    session.phase = "data"
+    session.key = bytes(16)
+    with pytest.raises(ProtocolError, match="cannot be set"):
+        control_frame(session, "arm", 0, data)
+    data["areas"][0].update(value=0, status="Unset")
+    entry.runtime_data.async_set_updated_data(data)
+    assert hass.states.get(state.entity_id).attributes["panel_status"] == "Unset"
+
+
 async def test_ui_config_flow_and_duplicate(hass):
     first = await hass.config_entries.flow.async_init(
         "pyronix_homecontrol", context={"source": "user"}

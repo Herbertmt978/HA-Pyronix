@@ -63,6 +63,7 @@ class PanelArea(CoordinatorEntity, AlarmControlPanelEntity):
             0: AlarmControlPanelState.DISARMED,
             2: AlarmControlPanelState.TRIGGERED,
             3: AlarmControlPanelState.ARMING,
+            4: AlarmControlPanelState.DISARMED,
             5: AlarmControlPanelState.DISARMED,
             6: AlarmControlPanelState.DISARMED,
         }.get(value)

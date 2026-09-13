@@ -1,7 +1,7 @@
 {
   "domain": "pyronix_homecontrol",
   "name": "Pyronix HomeControl",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "config_flow": true,
   "integration_type": "hub",
   "iot_class": "cloud_polling",

@@ -16,6 +16,8 @@ The area named `Night Set` uses HA's **Arm night** action. Other areas use **Arm
 
 A failed or uncertain request makes the entity unavailable. An unfamiliar panel state appears as unknown. HA does not assume the alarm is disarmed when it loses contact.
 
+The panel's “Cannot Set” and “Can Override” states mean an area is disarmed but cannot be armed normally. I show the reason in its `panel_status` attribute and refuse arming while either state is present. I do not force the alarm to omit a zone.
+
 ## Before starting
 
 You need a working HomeControl 2.0 account, a panel that connects successfully in the app, its separate **user code** and **app password**, and access to your HA configuration folder. The integration uses the Pyronix cloud service; it is not an offline LAN integration.
