@@ -8,6 +8,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.pyronix_homecontrol.client import (
+    CommandUnconfirmedError,
     PanelClient,
     ProtocolError,
     control_frame,
@@ -128,6 +129,102 @@ async def test_ambiguous_command_failure_does_not_report_disarmed(hass):
             )
         assert hass.states.get(entity).state == "unavailable"
         query.assert_awaited_once()
+
+
+async def test_background_poll_during_command_preserves_last_observation(hass):
+    entry = await setup(hass)
+    coordinator = entry.runtime_data
+    before = copy.deepcopy(coordinator.data)
+    async with coordinator.client.lock:
+        await coordinator.async_refresh()
+    assert coordinator.last_update_success
+    assert coordinator.data == before
+    assert all(s.state == "disarmed" for s in hass.states.async_all("alarm_control_panel"))
+    assert coordinator.update_interval.total_seconds() == 10
+
+
+async def test_second_manual_request_does_not_mark_other_controls_unavailable(hass):
+    entry = await setup(hass)
+    entity = hass.states.async_all("alarm_control_panel")[0].entity_id
+    async with entry.runtime_data.client.lock:
+        with pytest.raises(HomeAssistantError, match="in progress"):
+            await hass.services.async_call(
+                "alarm_control_panel",
+                "alarm_arm_away",
+                {"entity_id": entity, "code": "9876"},
+                blocking=True,
+            )
+    assert entry.runtime_data.last_update_success
+    assert all(s.state == "disarmed" for s in hass.states.async_all("alarm_control_panel"))
+
+
+async def test_setting_confirmation_is_arming_with_prompt_read_only_followup(hass):
+    entry = await setup(hass)
+    coordinator = entry.runtime_data
+    entity = next(
+        s.entity_id
+        for s in hass.states.async_all("alarm_control_panel")
+        if s.attributes["area_number"] == 3
+    )
+    setting = copy.deepcopy(DATA)
+    setting["areas"][3].update(value=3, status="Setting")
+    with patch.object(coordinator.client, "query", new=AsyncMock(return_value=setting)):
+        await hass.services.async_call(
+            "alarm_control_panel",
+            "alarm_arm_away",
+            {"entity_id": entity, "code": "9876"},
+            blocking=True,
+        )
+    state = hass.states.get(entity)
+    assert state.state == "arming" and state.attributes["poll_interval_seconds"] == 10
+    assert coordinator._unsub_refresh is not None
+    armed = copy.deepcopy(setting)
+    armed["areas"][3].update(value=1, status="Set")
+    with patch.object(coordinator.client, "query", new=AsyncMock(return_value=armed)) as query:
+        await coordinator.async_refresh()
+    query.assert_awaited_once_with()
+    state = hass.states.get(entity)
+    assert state.state == "armed_away" and state.attributes["poll_interval_seconds"] == 120
+    assert all(
+        s.state == "disarmed"
+        for s in hass.states.async_all("alarm_control_panel")
+        if s.attributes["area_number"] != 3
+    )
+
+
+async def test_unconfirmed_command_preserves_fresh_readback_without_claiming_success(hass):
+    entry = await setup(hass)
+    entity = hass.states.async_all("alarm_control_panel")[0].entity_id
+    with patch.object(
+        entry.runtime_data.client,
+        "query",
+        new=AsyncMock(side_effect=CommandUnconfirmedError(copy.deepcopy(DATA))),
+    ):
+        with pytest.raises(HomeAssistantError, match="not confirmed"):
+            await hass.services.async_call(
+                "alarm_control_panel",
+                "alarm_arm_away",
+                {"entity_id": entity, "code": "9876"},
+                blocking=True,
+            )
+    assert hass.states.get(entity).state == "disarmed"
+    assert entry.runtime_data.last_update_success
+
+
+async def test_failed_fast_poll_returns_to_normal_interval(hass):
+    entry = await setup(hass)
+    data = copy.deepcopy(DATA)
+    data["areas"][3].update(value=3, status="Setting")
+    entry.runtime_data.async_set_updated_data(data)
+    assert entry.runtime_data.update_interval.total_seconds() == 10
+    with patch.object(
+        entry.runtime_data.client,
+        "query",
+        new=AsyncMock(side_effect=ProtocolError("Connection failed")),
+    ):
+        await entry.runtime_data.async_refresh()
+    assert entry.runtime_data.update_interval.total_seconds() == 120
+    assert not entry.runtime_data.last_update_success
 
 
 async def test_unknown_state_is_not_disarmed(hass):

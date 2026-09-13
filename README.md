@@ -14,9 +14,13 @@ This is an early version. I have verified a real login and area status reads wit
 
 The area named `Night Set` uses HA's **Arm night** action. Other areas use **Arm away**. Each action applies only to that entity's area. I have not added an “arm everything” action, forced omissions, outputs or installer settings.
 
-A failed or uncertain request makes the entity unavailable. An unfamiliar panel state appears as unknown. HA does not assume the alarm is disarmed when it loses contact.
+A failed status read makes the entity unavailable. An unfamiliar panel state appears as unknown. HA does not assume the alarm is disarmed when it loses contact.
 
 I allow one fresh connection after a status read times out or loses its connection, within the same 50-second limit. Arm and disarm requests are never retried, including when their acknowledgement is lost. Rejected credentials are not retried either.
+
+When the panel confirms **Setting**, HA shows **Arming** immediately and checks status every ten seconds until the area finishes setting. It then returns to the normal two-minute interval. A background poll that overlaps a manual command keeps the last observed state instead of making every area unavailable.
+
+If the connection fails after a command is attempted, I open one read-only connection to check what happened. HA reports success only if that fresh read confirms the requested state, or confirms Setting for an arm request. I reserve time for this check within the same 50-second limit and never send the command again. If I still cannot confirm the result, HA says its outcome is uncertain; check the real panel before trying again. Any successful readback remains visible, even if it does not confirm the requested action.
 
 The panel's “Cannot Set” and “Can Override” states mean an area is disarmed but cannot be armed normally. I show the reason in its `panel_status` attribute and refuse arming while either state is present. I do not force the alarm to omit a zone.
 

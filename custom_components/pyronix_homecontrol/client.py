@@ -5,6 +5,7 @@ import json
 import time
 from collections import deque
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 import aiohttp
 
@@ -24,6 +25,33 @@ STATUS = {
 
 class AuthenticationError(ProtocolError):
     """A confirmed rejection; caller must not repeatedly retry credentials."""
+
+
+class PanelBusyError(ProtocolError):
+    """A local operation owns the connection; this is not a panel outage."""
+
+
+class CommandUnconfirmedError(ProtocolError):
+    """The command was attempted, but its outcome remains uncertain."""
+
+    def __init__(self, snapshot=None):
+        super().__init__(
+            "Command attempted, but the requested state is not confirmed. "
+            "Check the panel before trying again; the command was not repeated."
+        )
+        self.snapshot = snapshot
+
+
+@dataclass
+class CommandAttempt:
+    """Track a write attempt even if sending it loses the connection."""
+
+    sent: bool = False
+
+
+def operation_confirmed(operation, value):
+    """Setting confirms an arm request, without claiming the area is fully armed."""
+    return value in (1, 3) if operation == "arm" else value == 0
 
 
 def validate_auth(auth):
@@ -109,27 +137,50 @@ class PanelClient:
     async def query(self, operation=None, area=None):
         """Fresh status before each command. No actuation retries or queue."""
         if self.lock.locked():
-            raise ProtocolError("Another panel operation is in progress; try again")
+            raise PanelBusyError("Another panel operation is in progress; try again")
         async with self.lock:
+            attempt = CommandAttempt() if operation is not None else None
             try:
                 async with asyncio.timeout(50):
-                    attempts = 2 if operation is None else 1
-                    for attempt in range(attempts):
+                    if operation is not None:
+                        return await self._control_transaction(operation, area, attempt)
+                    attempts = 2
+                    for connection_index in range(attempts):
                         try:
                             return await self._transaction(operation, area)
                         except TimeoutError, aiohttp.ClientError, OSError:
-                            if attempt + 1 == attempts:
+                            if connection_index + 1 == attempts:
                                 raise
             except asyncio.CancelledError:
                 raise
             except AuthenticationError, ProtocolError:
                 raise
             except TimeoutError, aiohttp.ClientError, ValueError, UnicodeError, OSError:
+                if attempt is not None and attempt.sent:
+                    raise CommandUnconfirmedError() from None
                 raise ProtocolError(
                     "Panel connection failed or timed out; state is unconfirmed"
                 ) from None
 
-    async def _transaction(self, operation, area):
+    async def _control_transaction(self, operation, area, attempt):
+        try:
+            # Leave part of the overall 50-second limit for a read-only confirmation.
+            async with asyncio.timeout(25):
+                return await self._transaction(operation, area, attempt)
+        except TimeoutError, aiohttp.ClientError, OSError:
+            if not attempt.sent:
+                raise
+        try:
+            snapshot = await self._transaction(None, None)
+        except AuthenticationError:
+            raise
+        except ProtocolError, TimeoutError, aiohttp.ClientError, OSError:
+            raise CommandUnconfirmedError() from None
+        if operation_confirmed(operation, snapshot["areas"].get(area, {}).get("value")):
+            return snapshot
+        raise CommandUnconfirmedError(snapshot)
+
+    async def _transaction(self, operation, area, attempt=None):
         session = PanelSession(self.auth["PanelId"], self.auth["PanelPwd"])
         framing, frames = FrameBuffer(), deque()
         snapshot = {
@@ -139,7 +190,7 @@ class PanelClient:
             "permissions_received": False,
         }
         phase = "cloud"
-        password_requested = connect_requested = command_sent = False
+        password_requested = connect_requested = False
         async with self.http.ws_connect(
             ENDPOINT,
             timeout=aiohttp.ClientWSTimeout(ws_close=3),
@@ -152,7 +203,7 @@ class PanelClient:
                     if not frames:
                         message = await asyncio.wait_for(ws.receive(), 20)
                         if message.type not in (aiohttp.WSMsgType.TEXT, aiohttp.WSMsgType.BINARY):
-                            raise ProtocolError("Panel connection closed; state is unconfirmed")
+                            raise ConnectionError("Panel connection closed; state is unconfirmed")
                         if not message.data.strip():
                             if phase == "data":
                                 await ws.send_str(session.heartbeat())
@@ -220,21 +271,21 @@ class PanelClient:
                             if operation is None:
                                 snapshot["observed_at"] = time.time()
                                 return snapshot
-                            if not command_sent:
+                            if not attempt.sent:
                                 frame = control_frame(session, operation, area, snapshot)
-                                wanted = 1 if operation == "arm" else 0
-                                if snapshot["areas"][area]["value"] == wanted:
+                                if operation_confirmed(operation, snapshot["areas"][area]["value"]):
                                     snapshot["observed_at"] = time.time()
                                     return (
                                         snapshot  # Already at target; no physical command needed.
                                     )
-                                command_sent = True  # Never retry even if acknowledgement is lost.
+                                # Mark before sending: a failed write can still reach the panel.
+                                attempt.sent = True
                                 await ws.send_str(frame)
                             elif record.get("type") == "area" and any(
                                 r.get("R") == area for r in record.get("Detail", [])
                             ):
                                 value = snapshot["areas"][area]["value"]
-                                if value == wanted:
+                                if operation_confirmed(operation, value):
                                     snapshot["observed_at"] = time.time()
                                     return snapshot
                                 if value in (4, 5, 6):

@@ -14,7 +14,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import DOMAIN
-from .client import ProtocolError
+from .client import CommandUnconfirmedError, PanelBusyError, ProtocolError
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -77,7 +77,7 @@ class PanelArea(CoordinatorEntity, AlarmControlPanelEntity):
             ).isoformat(),
             "area_number": self.index,
             "state_source": "Pyronix panel",
-            "poll_interval_seconds": 120,
+            "poll_interval_seconds": int(self.coordinator.update_interval.total_seconds()),
         }
 
     async def _control(self, operation, code):
@@ -91,6 +91,14 @@ class PanelArea(CoordinatorEntity, AlarmControlPanelEntity):
             raise HomeAssistantError("Pyronix is unavailable; refresh its state before retrying")
         try:
             data = await self.coordinator.client.query(operation, self.index)
+        except PanelBusyError as exc:
+            raise HomeAssistantError(str(exc)) from None
+        except CommandUnconfirmedError as exc:
+            if exc.snapshot is not None:
+                self.coordinator.async_set_updated_data(exc.snapshot)
+            else:
+                self.coordinator.async_set_update_error(exc)
+            raise HomeAssistantError(str(exc)) from None
         except ProtocolError as exc:
             self.coordinator.async_set_update_error(exc)
             raise HomeAssistantError(str(exc)) from None
