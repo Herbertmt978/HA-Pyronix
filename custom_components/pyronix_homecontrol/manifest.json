@@ -1,0 +1,14 @@
+{
+  "domain": "pyronix_homecontrol",
+  "name": "Pyronix HomeControl",
+  "version": "0.1.0",
+  "config_flow": true,
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "codeowners": [
+    "@Herbertmt978"
+  ],
+  "requirements": [],
+  "documentation": "https://github.com/Herbertmt978/Pyronix-HomeControl-HA",
+  "issue_tracker": "https://github.com/Herbertmt978/Pyronix-HomeControl-HA/issues"
+}

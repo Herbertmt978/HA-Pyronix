@@ -1,0 +1,11 @@
+{
+  "config": {
+    "step": {
+      "user": {"title": "Connect Pyronix HomeControl", "description": "Enter the privately prepared HomeControl connection details. The integration reads status and requires the Pyronix user code for manual arm/disarm commands.", "data": {"connection_details": "Connection details"}},
+      "reconfigure": {"title": "Update Pyronix credentials", "data": {"app_password": "App password", "user_code": "Pyronix user code"}},
+      "reauth_confirm": {"title": "Reconnect Pyronix", "data": {"app_password": "App password", "user_code": "Pyronix user code"}}
+    },
+    "error": {"invalid_connection": "The connection details are incomplete or invalid."},
+    "abort": {"already_configured": "This panel is already configured.", "reconfigure_successful": "Pyronix credentials updated.", "reauth_successful": "Pyronix credentials updated."}
+  }
+}
