@@ -2,27 +2,23 @@
 
 I built this so I can use my Pyronix alarm from Home Assistant without leaving BlueStacks running. HA connects directly to PyronixCloud and opens an encrypted connection to the panel.
 
-This is an early version. I have verified a real login and area status reads with HomeControl 2.0 app **6.3.0** and panel firmware **2.11**. Arm and disarm pass simulated tests, but I have **not yet completed a real arm/disarm test**. I have not confirmed compatibility with other panels or app versions.
+This is an early version. I have verified a real login and area status reads with HomeControl 2.0 app **6.3.0** and panel firmware **2.11**. Arming has worked on my real panel. The current connection flow and disarming still need a physical user trial; automated control tests use a simulated panel. I have not confirmed compatibility with other panels or app versions.
 
 ## What it does
 
-- Adds an alarm entity for each area the panel user can control.
-- Reads status every two minutes and releases the connection after each request.
-- Requires the Pyronix user code before arming or disarming an area.
-- Reads fresh status before a command and waits for the panel to confirm the result.
-- Does not retry a command if its acknowledgement is lost.
+1. Press **Connect** to open an encrypted session and read the current area states.
+2. Choose an area, enter your **Pyronix user code**, then arm or disarm it.
+3. Press **Disconnect** when you finish. This closes the connection; it does not disarm the alarm.
 
-The area named `Night Set` uses HA's **Arm night** action. Other areas use **Arm away**. Each action applies only to that entity's area. I have not added an “arm everything” action, forced omissions, outputs or installer settings.
+Connect and Disconnect stay available when the areas are unavailable. The **Connection** sensor shows whether HA is disconnected, connecting, connected or has encountered an error. After a failed connection, close any other live app connection and press Connect again.
 
-A failed status read makes the entity unavailable. An unfamiliar panel state appears as unknown. HA does not assume the alarm is disarmed when it loses contact.
+The same connection carries status updates and your command. There is no background polling or automatic connection at startup. A session closes after five minutes without a Connect press or alarm command; the Connection sensor includes its expiry time. While disconnected, the areas are unavailable because HA cannot verify their current state. Their names are retained across restarts, but old states are never presented as live.
 
-I allow one fresh connection after a status read times out or loses its connection, within the same 50-second limit. Arm and disarm requests are never retried, including when their acknowledgement is lost. Rejected credentials are not retried either.
+The area named `Night Set` uses HA's **Arm night** action. Other areas use **Arm away**. Each action applies only to that area. I have not added an “arm everything” action, forced omissions, outputs or installer settings.
 
-When the panel confirms **Setting**, HA shows **Arming** immediately and checks status every ten seconds until the area finishes setting. It then returns to the normal two-minute interval. A background poll that overlaps a manual command keeps the last observed state instead of making every area unavailable.
+HA waits for a panel response before reporting success. **Setting** appears as **Arming**, with later status arriving over the open connection. If a command is not confirmed within 25 seconds, HA reports an uncertain outcome. A late response can still update the displayed state. I never repeat an arm or disarm command automatically, even after a lost connection. Check the real panel before trying again.
 
-If the connection fails after a command is attempted, I open one read-only connection to check what happened. HA reports success only if that fresh read confirms the requested state, or confirms Setting for an arm request. I reserve time for this check within the same 50-second limit and never send the command again. If I still cannot confirm the result, HA says its outcome is uncertain; check the real panel before trying again. Any successful readback remains visible, even if it does not confirm the requested action.
-
-The panel's “Cannot Set” and “Can Override” states mean an area is disarmed but cannot be armed normally. I show the reason in its `panel_status` attribute and refuse arming while either state is present. I do not force the alarm to omit a zone.
+An unfamiliar panel state appears as unknown. “Cannot Set” and “Can Override” mean an area is disarmed but cannot be armed normally. I show the reason in its `panel_status` attribute and refuse arming while either state is present.
 
 ## Before starting
 
@@ -52,7 +48,7 @@ python tools/setup_from_adb.py --system-name "My alarm" --device "127.0.0.1:5555
 ```
 
 7. Enter the **Pyronix user code** and the temporary **HA access token** at the hidden prompts. Do not put either in the command itself.
-8. Open **Settings → Devices & services → Pyronix HomeControl** in HA. Check that the area states agree with the app before trying a control.
+8. Close the live panel screen in HomeControl. Open **Settings → Devices & services → Pyronix HomeControl** in HA and press **Connect**. Check the area states before trying a control.
 9. Delete the temporary HA token. The integration does not need it after setup. You can close BlueStacks and turn its debugging option off again.
 
 The helper looks for ADB on your PATH or in the usual BlueStacks installation folder. If necessary, add `--adb "C:\path\to\HD-Adb.exe"` to the command.
@@ -61,7 +57,7 @@ The helper reads only the HomeControl process log, selects the system name you s
 
 ## Add controls to a dashboard
 
-Edit a dashboard and add an **Alarm panel** card for each Pyronix area you want to use. Enter the **Pyronix user code** when arming or disarming. This integration does not change any separate PIN you use for HA notifications or tablet kiosks.
+Add the **Connection** sensor and **Connect** / **Disconnect** buttons to your dashboard. Then add an **Alarm panel** card for each Pyronix area you want to use. Enter the **Pyronix user code** when arming or disarming. This integration does not change any separate PIN you use for HA notifications or tablet kiosks.
 
 The panel may refuse to arm when a detector is open or a fault needs attention. I leave that decision with the panel. I have not enabled forced arming or automatic alarm schedules.
 
@@ -70,7 +66,8 @@ The panel may refuse to arm when a detector is open or a fault needs attention. 
 - **No matching connection found:** reopen the selected system in HomeControl, wait for the areas to load and run the helper again. Match the system name exactly.
 - **ADB cannot connect:** check that debugging is enabled and use the address and port for the correct BlueStacks instance.
 - **Integration unavailable:** restart HA after copying the files. Check that the folder was not nested twice.
-- **Panel busy or offline:** close the live panel screen in the phone app and check its network connection. HA releases each connection instead of keeping a permanent session open.
+- **Panel busy or offline:** close the live panel screen in the phone app and check its network connection. Press **Connect** to try again. Press **Disconnect** in HA before opening a live connection in the phone app.
+- **Reconnecting immediately fails:** I have seen the cloud report that the panel is not polling straight after Disconnect, then accept a connection about 35 seconds later. Wait briefly and press **Connect** again. The buttons remain available after an error.
 - **Credentials changed:** use **Reconfigure** on the integration and enter the new app password and user code.
 - **Command timed out:** check the real panel or app before trying again. A timeout does not prove the command failed.
 
@@ -89,6 +86,6 @@ ruff format --check .
 pytest -q
 ```
 
-The tests use synthetic credentials and a simulated panel. They cover the encrypted handshake, fragmented messages, area permissions, HA services, wrong codes and lost acknowledgements. They do not arm a real alarm.
+The tests use synthetic credentials and a simulated panel. They cover the encrypted handshake, fragmented messages, area permissions, HA services, wrong codes, lost acknowledgements, live updates, heartbeats, idle expiry and connection controls while offline. They do not arm a real alarm.
 
 I wrote this as an independent integration. It is not an official Pyronix or Home Assistant product.

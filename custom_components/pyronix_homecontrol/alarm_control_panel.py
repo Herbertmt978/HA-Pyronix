@@ -10,17 +10,23 @@ from homeassistant.components.alarm_control_panel import (
     CodeFormat,
 )
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import DOMAIN
-from .client import CommandUnconfirmedError, PanelBusyError, ProtocolError
+from .client import ProtocolError
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = entry.runtime_data
-    permitted = coordinator.data["can_arm"] | coordinator.data["can_disarm"]
-    async_add_entities(PanelArea(coordinator, index) for index in sorted(permitted))
+    known = set()
+
+    def discover():
+        indices = set(coordinator.data["areas"]) - known
+        if indices:
+            known.update(indices)
+            async_add_entities(PanelArea(coordinator, index) for index in sorted(indices))
+
+    entry.async_on_unload(coordinator.async_add_listener(discover))
+    discover()
 
 
 class PanelArea(CoordinatorEntity, AlarmControlPanelEntity):
@@ -39,16 +45,15 @@ class PanelArea(CoordinatorEntity, AlarmControlPanelEntity):
             if self._night
             else AlarmControlPanelEntityFeature.ARM_AWAY
         )
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, coordinator.device_id)},
-            name="Pyronix " + coordinator.config_entry.title,
-            manufacturer="Pyronix",
-            sw_version=coordinator.data.get("firmware"),
-        )
+        self._attr_device_info = coordinator.device_info
 
     @property
     def available(self):
-        return super().available and self.index in self.coordinator.data["areas"]
+        return (
+            super().available
+            and self.coordinator.client.connected
+            and self.index in self.coordinator.data["areas"]
+        )
 
     @property
     def alarm_state(self):
@@ -74,10 +79,12 @@ class PanelArea(CoordinatorEntity, AlarmControlPanelEntity):
             "panel_status": self.coordinator.data["areas"].get(self.index, {}).get("status"),
             "last_observed": datetime.fromtimestamp(
                 self.coordinator.data["observed_at"], UTC
-            ).isoformat(),
+            ).isoformat()
+            if self.coordinator.data["observed_at"] is not None
+            else None,
             "area_number": self.index,
             "state_source": "Pyronix panel",
-            "poll_interval_seconds": int(self.coordinator.update_interval.total_seconds()),
+            "connection": self.coordinator.client.state,
         }
 
     async def _control(self, operation, code):
@@ -88,21 +95,11 @@ class PanelArea(CoordinatorEntity, AlarmControlPanelEntity):
         ):
             raise ServiceValidationError("Incorrect Pyronix user code")
         if not self.available:
-            raise HomeAssistantError("Pyronix is unavailable; refresh its state before retrying")
+            raise HomeAssistantError("Disconnected. Press Connect before choosing an alarm action.")
         try:
-            data = await self.coordinator.client.query(operation, self.index)
-        except PanelBusyError as exc:
-            raise HomeAssistantError(str(exc)) from None
-        except CommandUnconfirmedError as exc:
-            if exc.snapshot is not None:
-                self.coordinator.async_set_updated_data(exc.snapshot)
-            else:
-                self.coordinator.async_set_update_error(exc)
-            raise HomeAssistantError(str(exc)) from None
+            await self.coordinator.client.control(operation, self.index)
         except ProtocolError as exc:
-            self.coordinator.async_set_update_error(exc)
             raise HomeAssistantError(str(exc)) from None
-        self.coordinator.async_set_updated_data(data)
 
     async def async_alarm_arm_away(self, code=None):
         await self._control("arm", code)
