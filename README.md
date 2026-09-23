@@ -1,8 +1,30 @@
+<div align="center">
+
+<img src="brand/header.svg" alt="Pyronix HomeControl: alarm control for Home Assistant" width="720">
+
 # Pyronix HomeControl for Home Assistant
 
-I built this so I can use my Pyronix alarm from Home Assistant without leaving BlueStacks running. HA connects directly to PyronixCloud and opens an encrypted connection to the panel.
+Connect to your Pyronix alarm through Home Assistant without leaving BlueStacks running.
 
-This is an early version. I have verified a real login and area status reads with HomeControl 2.0 app **6.3.0** and panel firmware **2.11**. Arming has worked on my real panel. The current connection flow and disarming still need a physical user trial; automated control tests use a simulated panel. I have not confirmed compatibility with other panels or app versions.
+[![Licence: MIT](https://img.shields.io/badge/Licence-MIT-0F766E.svg)](LICENSE)
+[![Home Assistant custom integration](https://img.shields.io/badge/Home%20Assistant-Custom%20integration-0EA5E9?logo=home-assistant&logoColor=white)](#install-the-integration)
+
+[How it works](#what-it-does) | [Install](#install-the-integration) | [Set up](#connect-your-own-alarm) | [Safety and limits](#safety-and-limits) | [Troubleshooting](#if-something-goes-wrong) | [Development](#development)
+
+</div>
+
+## What it is
+
+This custom integration connects directly to PyronixCloud and opens an encrypted
+session with the alarm panel. It exposes each area as a Home Assistant alarm
+control panel, with explicit Connect and Disconnect buttons. BlueStacks is used
+only to obtain setup details from your own signed-in HomeControl 2.0 app.
+
+The project is at an early stage. A real login and area status reads have been
+verified with HomeControl 2.0 app **6.3.0** and panel firmware **2.11**. Arming
+has worked on the maintainer's panel. The current connection flow and disarming
+still need a physical user trial; automated control tests use a simulated panel.
+Compatibility with other panels and app versions is unconfirmed.
 
 ## What it does
 
@@ -12,19 +34,34 @@ This is an early version. I have verified a real login and area status reads wit
 
 Connect and Disconnect stay available when the areas are unavailable. The **Connection** sensor shows whether HA is disconnected, connecting, connected or has encountered an error. After a failed connection, close any other live app connection and press Connect again.
 
-The same connection carries status updates and your command. There is no background polling or automatic connection at startup. A session closes after five minutes without a Connect press or alarm command; the Connection sensor includes its expiry time. While disconnected, the areas are unavailable because HA cannot verify their current state. Their names are retained across restarts, but old states are never presented as live.
+The same connection carries status updates and commands. There is no background polling or automatic connection at startup. A session closes after five minutes without a Connect press or alarm command; the Connection sensor includes its expiry time. While disconnected, the areas are unavailable because Home Assistant cannot verify their current state. Their names are retained across restarts, but old states are never presented as live.
 
-The area named `Night Set` uses HA's **Arm night** action. Other areas use **Arm away**. Each action applies only to that area. I have not added an “arm everything” action, forced omissions, outputs or installer settings.
+The area named `Night Set` uses Home Assistant's **Arm night** action. Other areas use **Arm away**. Each action applies only to that area. There is no “arm everything” action, forced omissions, outputs or installer settings.
 
-HA waits for a panel response before reporting success. **Setting** appears as **Arming**, with later status arriving over the open connection. If a command is not confirmed within 25 seconds, HA reports an uncertain outcome. A late response can still update the displayed state. I never repeat an arm or disarm command automatically, even after a lost connection. Check the real panel before trying again.
+Home Assistant waits for a panel response before reporting success. **Setting** appears as **Arming**, with later status arriving over the open connection. If a command is not confirmed within 25 seconds, Home Assistant reports an uncertain outcome. A late response can still update the displayed state. The integration never repeats an arm or disarm command automatically, even after a lost connection. Check the real panel before trying again.
 
-An unfamiliar panel state appears as unknown. “Cannot Set” and “Can Override” mean an area is disarmed but cannot be armed normally. I show the reason in its `panel_status` attribute and refuse arming while either state is present.
+An unfamiliar panel state appears as unknown. “Cannot Set” and “Can Override” mean an area is disarmed but cannot be armed normally. The reason appears in its `panel_status` attribute, and arming is refused while either state is present.
+
+## Safety and limits
+
+- The integration depends on PyronixCloud and an available panel. It is not an
+  offline or local network connection.
+- A timeout does not prove an arm or disarm command failed. Confirm the real
+  panel state before trying again.
+- Areas show as unavailable while disconnected. Do not use an unverified area
+  state as the sole trigger for a safety-critical automation.
+- The verified hardware and app versions are listed above; other combinations
+  need their own checks. This is independent community software, not an official
+  Pyronix or Home Assistant product.
 
 ## Before starting
 
 You need a working HomeControl 2.0 account, a panel that connects successfully in the app, its separate **user code** and **app password**, and access to your HA configuration folder. The integration uses the Pyronix cloud service; it is not an offline LAN integration.
 
-I used BlueStacks on Windows for the initial setup. It is only needed to obtain the connection details from your own signed-in app. The helper does not need Android root access. App versions that stop exposing those details in their process log will need another setup method.
+The documented setup uses BlueStacks on Windows to obtain connection details
+from your own signed-in app. The helper does not need Android root access. App
+versions that stop exposing those details in their process log will need
+another setup method.
 
 ## Install the integration
 
@@ -32,7 +69,9 @@ I used BlueStacks on Windows for the initial setup. It is only needed to obtain 
 2. Copy `custom_components/pyronix_homecontrol` into your HA `/config/custom_components/` folder. The result should include `/config/custom_components/pyronix_homecontrol/manifest.json`.
 3. Restart Home Assistant.
 
-This is a manual installation; I have not published a HACS release yet. I check compatibility with HA's 2026.7.1 and 2026.9.1 test fixtures, alongside import and startup checks on my DEV system.
+This is a manual installation; there is no HACS release. Tests cover Home
+Assistant 2026.7.1 and 2026.9.1 fixtures, with import and startup checks on a
+development system.
 
 ## Connect your own alarm
 
@@ -67,7 +106,7 @@ The panel may refuse to arm when a detector is open or a fault needs attention. 
 - **ADB cannot connect:** check that debugging is enabled and use the address and port for the correct BlueStacks instance.
 - **Integration unavailable:** restart HA after copying the files. Check that the folder was not nested twice.
 - **Panel busy or offline:** close the live panel screen in the phone app and check its network connection. Press **Connect** to try again. Press **Disconnect** in HA before opening a live connection in the phone app.
-- **Reconnecting immediately fails:** I have seen the cloud report that the panel is not polling straight after Disconnect, then accept a connection about 35 seconds later. Wait briefly and press **Connect** again. The buttons remain available after an error.
+- **Reconnecting immediately fails:** the cloud has sometimes reported that the panel is not polling immediately after Disconnect, then accepted a connection about 35 seconds later. Wait briefly and press **Connect** again. The buttons remain available after an error.
 - **Credentials changed:** use **Reconfigure** on the integration and enter the new app password and user code.
 - **Command timed out:** check the real panel or app before trying again. A timeout does not prove the command failed.
 
@@ -75,7 +114,7 @@ Do not upload app logs, access tokens, connection details or HA backups to an is
 
 ## Development
 
-I run the HA tests in an isolated Linux environment with Python 3.14:
+Run the Home Assistant tests in an isolated Linux environment with Python 3.14:
 
 ```sh
 python -m venv .venv
@@ -88,4 +127,6 @@ pytest -q
 
 The tests use synthetic credentials and a simulated panel. They cover the encrypted handshake, fragmented messages, area permissions, HA services, wrong codes, lost acknowledgements, live updates, heartbeats, idle expiry and connection controls while offline. They do not arm a real alarm.
 
-I wrote this as an independent integration. It is not an official Pyronix or Home Assistant product.
+This project is available under the [MIT licence](LICENSE). For bugs, use
+[GitHub Issues](https://github.com/Herbertmt978/HA-Pyronix/issues)
+after removing credentials, tokens, connection details and private alarm data.
