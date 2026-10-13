@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="brand/header.svg" alt="Pyronix HomeControl: alarm control for Home Assistant" width="720">
+<img src="brand/header.svg" alt="Pyronix HomeControl: an alarm keypad with per-area arming status" width="880">
 
 # Pyronix HomeControl for Home Assistant
 
