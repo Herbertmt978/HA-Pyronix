@@ -1,38 +1,64 @@
 """Connection controls remain available when the alarm areas are unavailable."""
 
-from homeassistant.components.button import ButtonEntity
+from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .client import ProtocolError
+from .client import AuthenticationError
+from .const import DOMAIN
+from .coordinator import PanelCoordinator, PyronixConfigEntry
+from .entity import PyronixEntity
+from .panel_protocol import ProtocolError
+
+PARALLEL_UPDATES = 0
+
+BUTTONS = (
+    ButtonEntityDescription(key="connect", translation_key="connect"),
+    ButtonEntityDescription(key="disconnect", translation_key="disconnect"),
+)
 
 
-async def async_setup_entry(hass, entry, async_add_entities):
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: PyronixConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    """Add the Connect and Disconnect buttons."""
     async_add_entities(
-        ConnectionButton(entry.runtime_data, action) for action in ("connect", "disconnect")
+        ConnectionButton(entry.runtime_data, description) for description in BUTTONS
     )
 
 
-class ConnectionButton(CoordinatorEntity, ButtonEntity):
-    _attr_has_entity_name = True
+class ConnectionButton(PyronixEntity, ButtonEntity):
+    """Open or close the panel session."""
 
-    def __init__(self, coordinator, action):
-        super().__init__(coordinator)
-        self.action = action
-        self._attr_name = action.title()
-        self._attr_unique_id = coordinator.device_id + "_" + action
-        self._attr_icon = "mdi:lan-connect" if action == "connect" else "mdi:lan-disconnect"
-        self._attr_device_info = coordinator.device_info
+    def __init__(
+        self, coordinator: PanelCoordinator, description: ButtonEntityDescription
+    ) -> None:
+        """Bind the button to its session action."""
+        super().__init__(coordinator, description.key)
+        self.entity_description = description
 
     @property
-    def available(self):
+    def available(self) -> bool:
+        """Stay usable while disconnected, so a failed session can be retried."""
         return True
 
-    async def async_press(self):
+    async def async_press(self) -> None:
+        """Open or close the session."""
+        if self.entity_description.key == "disconnect":
+            await self.coordinator.async_disconnect()
+            return
         try:
-            if self.action == "connect":
-                await self.coordinator.async_connect()
-            else:
-                await self.coordinator.async_disconnect()
-        except ProtocolError as exc:
-            raise HomeAssistantError(str(exc)) from None
+            await self.coordinator.async_connect()
+        except AuthenticationError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="authentication_failed"
+            ) from err
+        except ProtocolError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="connect_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err

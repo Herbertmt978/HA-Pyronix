@@ -3,10 +3,10 @@ import base64
 import getpass
 import io
 import json
-import urllib.error
-import warnings
 from pathlib import Path
 from unittest.mock import Mock, patch
+import urllib.error
+import warnings
 
 import pytest
 
@@ -20,7 +20,7 @@ from tools.setup_from_adb import (
 )
 
 
-def connection(name, password="fixture-password"):
+def connection(name, password="fixture-password"):  # noqa: S107
     return f"<p><n>fixture-user</n><u>fixture-push</u><i>fixture-device</i><a>12345678</a><b>{name}</b><z>{password}</z></p>"
 
 
@@ -36,7 +36,9 @@ def test_only_requested_system_and_latest_connection_are_selected():
         + logged(connection("My alarm"))
     )
     result = extract_connection(log, "My alarm")
-    assert result["SystemName"] == "My alarm" and result["PanelPwd"] == "fixture-password"
+    assert (
+        result["SystemName"] == "My alarm" and result["PanelPwd"] == "fixture-password"
+    )
     assert "UserCode" not in result
 
 
@@ -49,7 +51,9 @@ def test_literal_xml_and_malformed_frames():
         extract_connection(log, "Another alarm")
 
 
-@pytest.mark.parametrize("url", ["http://homeassistant.local:8123/", "https://ha.example.com"])
+@pytest.mark.parametrize(
+    "url", ["http://homeassistant.local:8123/", "https://ha.example.com"]
+)
 def test_valid_ha_urls(url):
     assert validate_url(url) == url.rstrip("/")
 
@@ -72,12 +76,16 @@ def test_config_flow_receives_fields_without_printing(capsys):
     opener = Mock()
     opener.open.side_effect = [
         io.BytesIO(
-            json.dumps({"type": "form", "step_id": "user", "flow_id": "test-flow"}).encode()
+            json.dumps(
+                {"type": "form", "step_id": "user", "flow_id": "test-flow"}
+            ).encode()
         ),
         io.BytesIO(b'{"type":"create_entry"}'),
     ]
     with patch("tools.setup_from_adb.urllib.request.build_opener", return_value=opener):
-        configure_ha("https://ha.example.com", "fixture-token", {"PanelPwd": "fixture-password"})
+        configure_ha(
+            "https://ha.example.com", "fixture-token", {"PanelPwd": "fixture-password"}
+        )
     requests = [call.args[0] for call in opener.open.call_args_list]
     assert json.loads(json.loads(requests[1].data)["connection_details"]) == {
         "PanelPwd": "fixture-password"
@@ -88,26 +96,36 @@ def test_config_flow_receives_fields_without_printing(capsys):
 def test_http_errors_never_echo_request_or_response_data():
     opener = Mock()
     opener.open.side_effect = urllib.error.HTTPError(
-        "https://ha.example.com", 400, "secret-fixture", {}, io.BytesIO(b"secret-fixture")
+        "https://ha.example.com",
+        400,
+        "secret-fixture",
+        {},
+        io.BytesIO(b"secret-fixture"),
     )
-    with patch("tools.setup_from_adb.urllib.request.build_opener", return_value=opener):
-        with pytest.raises(SetupError) as result:
-            configure_ha("https://ha.example.com", "fixture-token", {})
+    with (
+        patch("tools.setup_from_adb.urllib.request.build_opener", return_value=opener),
+        pytest.raises(SetupError) as result,
+    ):
+        configure_ha("https://ha.example.com", "fixture-token", {})
     assert "secret-fixture" not in str(result.value)
 
 
 def test_redirect_cannot_forward_authorization():
     with pytest.raises(SetupError):
-        NoRedirect().redirect_request(None, None, 302, None, None, "https://another.example")
+        NoRedirect().redirect_request(
+            None, None, 302, None, None, "https://another.example"
+        )
 
 
 def test_hidden_prompt_stops_if_echo_cannot_be_disabled():
     def warn(_):
-        warnings.warn("Cannot hide input", getpass.GetPassWarning)
+        warnings.warn("Cannot hide input", getpass.GetPassWarning, stacklevel=2)
 
-    with patch("tools.setup_from_adb.getpass.getpass", side_effect=warn):
-        with pytest.raises(SetupError, match="hidden input"):
-            private_input("Private prompt")
+    with (
+        patch("tools.setup_from_adb.getpass.getpass", side_effect=warn),
+        pytest.raises(SetupError, match="hidden input"),
+    ):
+        private_input("Private prompt")
 
 
 def test_helper_remains_compatible_with_python_311():

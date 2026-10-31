@@ -1,0 +1,18 @@
+{
+  "entity": {
+    "button": {
+      "connect": {"default": "mdi:lan-connect"},
+      "disconnect": {"default": "mdi:lan-disconnect"}
+    },
+    "sensor": {
+      "connection": {
+        "default": "mdi:lan-disconnect",
+        "state": {
+          "connecting": "mdi:lan-pending",
+          "connected": "mdi:lan-connect",
+          "error": "mdi:alert-circle-outline"
+        }
+      }
+    }
+  }
+}

@@ -1,11 +1,52 @@
 {
   "config": {
     "step": {
-      "user": {"title": "Connect Pyronix HomeControl", "description": "Enter the privately prepared HomeControl connection details. The integration reads status and requires the Pyronix user code for manual arm/disarm commands.", "data": {"connection_details": "Connection details"}},
-      "reconfigure": {"title": "Update Pyronix credentials", "data": {"app_password": "App password", "user_code": "Pyronix user code"}},
-      "reauth_confirm": {"title": "Reconnect Pyronix", "data": {"app_password": "App password", "user_code": "Pyronix user code"}}
+      "user": {
+        "title": "Connect Pyronix HomeControl",
+        "description": "Enter the privately prepared HomeControl connection details. The integration reads status and requires the Pyronix user code for manual arm/disarm commands.",
+        "data": {"connection_details": "Connection details"},
+        "data_description": {"connection_details": "The setup helper normally submits these details for you. They are stored only in this integration's configuration."}
+      },
+      "reconfigure": {
+        "title": "Update Pyronix credentials",
+        "description": "Enter the app password and user code currently set for this panel in HomeControl 2.0.",
+        "data": {"app_password": "App password", "user_code": "Pyronix user code"},
+        "data_description": {"app_password": "The panel's app password, not your HomeControl account password.", "user_code": "The 4 to 8 digit code you use at the alarm keypad."}
+      },
+      "reauth_confirm": {
+        "title": "Reconnect Pyronix",
+        "description": "The panel rejected the saved credentials. Enter the app password and user code currently set for this panel in HomeControl 2.0.",
+        "data": {"app_password": "App password", "user_code": "Pyronix user code"},
+        "data_description": {"app_password": "The panel's app password, not your HomeControl account password.", "user_code": "The 4 to 8 digit code you use at the alarm keypad."}
+      }
     },
     "error": {"invalid_connection": "The connection details are incomplete or invalid."},
     "abort": {"already_configured": "This panel is already configured.", "reconfigure_successful": "Pyronix credentials updated.", "reauth_successful": "Pyronix credentials updated."}
+  },
+  "entity": {
+    "button": {
+      "connect": {"name": "Connect"},
+      "disconnect": {"name": "Disconnect"}
+    },
+    "sensor": {
+      "connection": {
+        "name": "Connection",
+        "state": {"disconnected": "Disconnected", "connecting": "Connecting", "connected": "Connected", "error": "Error"},
+        "state_attributes": {
+          "detail": {"name": "Detail"},
+          "idle_timeout_seconds": {"name": "Idle timeout (seconds)"},
+          "idle_expires_at": {"name": "Idle expiry"}
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "authentication_failed": {"message": "The panel rejected the saved credentials. Complete the re-authentication prompt, then press Connect."},
+    "connect_failed": {"message": "Could not connect to the panel: {error}"},
+    "incorrect_code": {"message": "Incorrect Pyronix user code."},
+    "not_connected": {"message": "Disconnected. Press Connect to read the panel."},
+    "command_in_progress": {"message": "Another panel command is in progress; wait for its result."},
+    "command_unconfirmed": {"message": "Command attempted, but the requested state is not confirmed. Check the panel before trying again; the command was not repeated."},
+    "command_failed": {"message": "The panel command failed: {error}"}
   }
 }
