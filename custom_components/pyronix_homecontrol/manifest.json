@@ -16,7 +16,7 @@
     "aiopyronix"
   ],
   "requirements": [
-    "aiopyronix==0.1.0"
+    "aiopyronix==0.1.1"
   ],
   "version": "0.3.0"
 }
