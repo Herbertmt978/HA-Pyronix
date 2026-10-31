@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 import hmac
 from typing import Any
 
+from aiopyronix import AreaState, CommandUnconfirmedError, PanelBusyError, ProtocolError
+
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
     AlarmControlPanelEntityFeature,
@@ -14,11 +16,9 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .client import AreaState, CommandUnconfirmedError, PanelBusyError
 from .const import DOMAIN
 from .coordinator import PanelCoordinator, PyronixConfigEntry
 from .entity import PyronixEntity
-from .panel_protocol import ProtocolError
 
 PARALLEL_UPDATES = 0
 

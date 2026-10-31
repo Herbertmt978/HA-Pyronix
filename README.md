@@ -155,7 +155,9 @@ ruff format --check .
 pytest -q
 ```
 
-The tests use synthetic credentials and a simulated panel. They cover the encrypted handshake, fragmented messages, area permissions, HA services, wrong codes, lost acknowledgements, live updates, heartbeats, idle expiry, connection controls while offline, re-authentication, reconfiguration and diagnostics. They do not arm a real alarm.
+The PyronixCloud client and panel protocol live in the [aiopyronix](https://github.com/Herbertmt978/aiopyronix) library. Its own tests cover the encrypted handshake, fragmented messages, area permissions, lost acknowledgements, heartbeats and idle expiry with full branch coverage.
+
+The tests here use synthetic credentials and a simulated panel. They cover HA services, wrong codes, live updates, connection controls while offline, re-authentication, reconfiguration and diagnostics. They do not arm a real alarm.
 
 `requirements-dev.txt` pins the current Home Assistant test harness. GitHub Actions also runs the suite against Home Assistant 2026.9, the minimum declared in `hacs.json`, checks strict typing with mypy, and validates the repository with the HACS action and Hassfest. Translations live only in `translations/en.json`, as the Marketplace expects for custom integrations.
 

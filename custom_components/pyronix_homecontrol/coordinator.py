@@ -4,6 +4,8 @@ import hashlib
 import logging
 from typing import TypedDict
 
+from aiopyronix import AuthenticationError, PanelClient, Snapshot, empty_snapshot
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
@@ -11,7 +13,6 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .client import AuthenticationError, PanelClient, Snapshot, empty_snapshot
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)

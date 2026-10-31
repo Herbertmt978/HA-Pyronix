@@ -1,3 +1,4 @@
+aiopyronix==0.1.0
 mypy==2.4.1
 pytest-homeassistant-custom-component==0.13.375
 ruff==0.17.3
