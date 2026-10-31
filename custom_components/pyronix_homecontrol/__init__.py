@@ -3,7 +3,7 @@
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import Event, HomeAssistant
 
-from .coordinator import PanelCoordinator, PyronixConfigEntry
+from .coordinator import PanelCoordinator, PyronixConfigEntry, catalog_store
 
 PLATFORMS: list[Platform] = [
     Platform.ALARM_CONTROL_PANEL,
@@ -31,4 +31,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: PyronixConfigEntry) -> b
 async def async_unload_entry(hass: HomeAssistant, entry: PyronixConfigEntry) -> bool:
     """Close any open session and unload the entities."""
     await entry.runtime_data.async_disconnect()
+    await entry.runtime_data.async_save_catalog()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: PyronixConfigEntry) -> None:
+    """Delete the stored area names and firmware with the entry."""
+    await catalog_store(hass, entry.entry_id).async_remove()

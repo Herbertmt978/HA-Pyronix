@@ -82,10 +82,15 @@ def test_config_flow_receives_fields_without_printing(capsys):
         ),
         io.BytesIO(b'{"type":"create_entry"}'),
     ]
-    with patch("tools.setup_from_adb.urllib.request.build_opener", return_value=opener):
+    with patch(
+        "tools.setup_from_adb.urllib.request.build_opener", return_value=opener
+    ) as build_opener:
         configure_ha(
             "https://ha.example.com", "fixture-token", {"PanelPwd": "fixture-password"}
         )
+    # The token must never follow a redirect to another server.
+    [handler] = build_opener.call_args.args
+    assert isinstance(handler, NoRedirect)
     requests = [call.args[0] for call in opener.open.call_args_list]
     assert json.loads(json.loads(requests[1].data)["connection_details"]) == {
         "PanelPwd": "fixture-password"

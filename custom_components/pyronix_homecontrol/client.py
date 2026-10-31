@@ -277,15 +277,18 @@ class PanelClient:
         if ready is None:
             raise ProtocolError("Connection was disconnected.")
         try:
-            return await asyncio.wait_for(asyncio.shield(ready), self.CONNECT_TIMEOUT)
-        except TimeoutError:
-            await self.disconnect()
-            error = ProtocolError("Connection timed out. Press Connect to try again.")
-            self._set_state("error", str(error))
-            raise error from None
+            # Unlike wait_for(shield()), this leaves the shared future untouched, so
+            # failing it after a timeout or cancellation is not logged as unhandled.
+            done, _ = await asyncio.wait({ready}, timeout=self.CONNECT_TIMEOUT)
         except asyncio.CancelledError:
             await self.disconnect()
             raise
+        if not done:
+            await self.disconnect()
+            error = ProtocolError("Connection timed out. Press Connect to try again.")
+            self._set_state("error", str(error))
+            raise error
+        return ready.result()
 
     async def disconnect(self) -> None:
         """Close the session. This never sends an alarm command."""
