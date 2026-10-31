@@ -1,6 +1,9 @@
 {
   "domain": "pyronix_homecontrol",
   "name": "Pyronix HomeControl",
+  "categories": [
+    "security_safety.alarm_systems"
+  ],
   "codeowners": [
     "@Herbertmt978"
   ],
