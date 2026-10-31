@@ -11,7 +11,7 @@ Connect to your Pyronix alarm through Home Assistant without leaving BlueStacks 
 ![Home Assistant 2026.9+](https://img.shields.io/badge/Home%20Assistant-2026.9%2B-18BCF2?logo=home-assistant&logoColor=white)
 [![Licence: MIT](https://img.shields.io/badge/Licence-MIT-0F766E.svg)](LICENSE)
 
-[![Open this repository in the Home Assistant Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=Herbertmt978&repository=HA-Pyronix&category=integration)
+[![Open this repository in the Home Assistant Marketplace](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Herbertmt978&repository=HA-Pyronix&category=integration)
 
 [How it works](#what-it-does) | [Install](#install-the-integration) | [Set up](#connect-your-own-alarm) | [Safety and limits](#safety-and-limits) | [Troubleshooting](#if-something-goes-wrong) | [Development](#development)
 
@@ -71,22 +71,16 @@ another setup method.
 
 Home Assistant 2026.9 or later is required.
 
-### From the Marketplace
+### From the Marketplace or HACS
 
-Home Assistant 2026.11 and later include the Marketplace, which replaces HACS.
+[![Open this repository in the Home Assistant Marketplace](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Herbertmt978&repository=HA-Pyronix&category=integration)
 
-[![Open this repository in the Home Assistant Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=Herbertmt978&repository=HA-Pyronix&category=integration)
+The button opens the Marketplace on Home Assistant 2026.11 and later, and HACS on 2026.10.
 
-1. Select the button above and confirm your Home Assistant address. If the Marketplace does not list the repository yet, confirm adding it from the link.
-2. Select **Download**. A first installation is ready straight away; after an update, restart Home Assistant when the repair asks you to.
+1. Select the button and confirm your Home Assistant address. If the repository is not listed yet, confirm adding it from the link.
+2. Select **Download**, then restart Home Assistant if asked. HACS always needs a restart; the Marketplace needs one only after an update.
 
-### With HACS (Home Assistant 2026.10)
-
-[![Open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Herbertmt978&repository=HA-Pyronix&category=integration)
-
-Select the button, confirm adding the repository if HACS asks, then select **Download** and restart Home Assistant. To add it by hand instead, open **HACS → ⋮ → Custom repositories**, add `https://github.com/Herbertmt978/HA-Pyronix` with the type **Integration**, then download **Pyronix HomeControl**.
-
-The Marketplace and HACS both offer later releases as updates. HACS downloads carry over to the Marketplace when you upgrade Home Assistant.
+To add it by hand instead, add `https://github.com/Herbertmt978/HA-Pyronix` as a custom repository with the type **Integration**, then download **Pyronix HomeControl**. Later releases appear as updates, and HACS downloads carry over to the Marketplace when you upgrade Home Assistant.
 
 ### Manual installation
 
