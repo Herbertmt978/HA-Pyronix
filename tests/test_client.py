@@ -235,6 +235,32 @@ async def test_connect_timeout_is_bounded_and_releases_socket(make_client):
     assert client.state == "error" and wire.closed and http.connections == 1
 
 
+async def test_timed_out_or_cancelled_connect_reports_nothing_unhandled(make_client):
+    loop = asyncio.get_running_loop()
+    reports = []
+    previous = loop.get_exception_handler()
+    loop.set_exception_handler(
+        lambda _loop, context: reports.append(context["message"])
+    )
+    try:
+        timed_out, _wire, _http = make_client("handshake_timeout")
+        timed_out.CONNECT_TIMEOUT = 0.02
+        with pytest.raises(ProtocolError, match="timed out"):
+            await timed_out.connect()
+        cancelled, _wire, _http = make_client("handshake_timeout")
+        pending = asyncio.create_task(cancelled.connect())
+        await asyncio.sleep(0.01)
+        pending.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+        for _ in range(3):
+            await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(previous)
+    assert reports == []
+    assert cancelled.state == "disconnected"
+
+
 async def test_disconnect_cancels_connect_promptly(make_client):
     connecting = asyncio.Event()
     client, _wire, _http = make_client(

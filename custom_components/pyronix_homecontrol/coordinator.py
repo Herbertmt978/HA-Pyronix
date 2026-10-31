@@ -33,6 +33,18 @@ class Catalog(TypedDict):
     firmware: str | None
 
 
+def catalog_store(hass: HomeAssistant, entry_id: str) -> Store[Catalog]:
+    """Return the metadata store of one config entry."""
+    return Store(hass, 1, f"{DOMAIN}.{entry_id}")
+
+
+def permitted_only(data: Snapshot) -> Snapshot:
+    """Drop areas the panel user may neither arm nor disarm."""
+    permitted = data["can_arm"] | data["can_disarm"]
+    data["areas"] = {i: row for i, row in data["areas"].items() if i in permitted}
+    return data
+
+
 class PanelCoordinator(DataUpdateCoordinator[Snapshot]):
     """Publish snapshots from the session the user opened; never poll."""
 
@@ -49,8 +61,9 @@ class PanelCoordinator(DataUpdateCoordinator[Snapshot]):
         )
         self.device_id = hashlib.sha256(entry.data["PanelId"].encode()).hexdigest()[:24]
         self.catalog: Catalog = {"areas": [], "firmware": None}
-        self._store: Store[Catalog] = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}")
+        self._store = catalog_store(hass, entry.entry_id)
         self._session_failed = False
+        self._catalog_unsaved = False
         self.data = empty_snapshot()
         self.last_update_success = False
         self.client = PanelClient(
@@ -74,8 +87,7 @@ class PanelCoordinator(DataUpdateCoordinator[Snapshot]):
 
     @callback
     def _receive_snapshot(self, data: Snapshot) -> None:
-        permitted = data["can_arm"] | data["can_disarm"]
-        data["areas"] = {i: row for i, row in data["areas"].items() if i in permitted}
+        data = permitted_only(data)
         catalog: Catalog = {
             "areas": [
                 {"index": i, "name": row["name"]}
@@ -87,6 +99,7 @@ class PanelCoordinator(DataUpdateCoordinator[Snapshot]):
             if catalog["firmware"] != self.catalog["firmware"]:
                 self._update_firmware(catalog["firmware"])
             self.catalog = catalog
+            self._catalog_unsaved = True
             self._store.async_delay_save(lambda: self.catalog, 1)
         self.async_set_updated_data(data)
 
@@ -101,6 +114,8 @@ class PanelCoordinator(DataUpdateCoordinator[Snapshot]):
 
     @callback
     def _connection_changed(self) -> None:
+        if not self.client.connected:
+            self._forget_live_state()
         if self.client.state == "error" and not self._session_failed:
             self._session_failed = True
             _LOGGER.info("Pyronix session ended: %s", self.client.detail)
@@ -112,13 +127,22 @@ class PanelCoordinator(DataUpdateCoordinator[Snapshot]):
         )
         self.async_update_listeners()
 
+    @callback
+    def _forget_live_state(self) -> None:
+        # The next session marks itself connected before its first snapshot arrives;
+        # without this, the previous session's states would briefly read as live.
+        self.data["observed_at"] = None
+        for row in self.data["areas"].values():
+            row["value"] = None
+            row["status"] = "Unknown"
+
     async def _async_update_data(self) -> Snapshot:
         # A generic HA refresh must not silently open a disconnected alarm session.
         if not self.client.connected:
             raise UpdateFailed(
                 translation_domain=DOMAIN, translation_key="not_connected"
             )
-        return self.client.snapshot()
+        return permitted_only(self.client.snapshot())
 
     async def async_connect(self) -> None:
         """Open or extend the session; ask for new credentials if they are rejected."""
@@ -128,6 +152,12 @@ class PanelCoordinator(DataUpdateCoordinator[Snapshot]):
             # A rejection is not retried; ask for the changed app password or user code.
             self.config_entry.async_start_reauth(self.hass)
             raise
+
+    async def async_save_catalog(self) -> None:
+        """Write a pending catalogue change now; removing the entry cannot then race it."""
+        if self._catalog_unsaved:
+            self._catalog_unsaved = False
+            await self._store.async_save(self.catalog)
 
     async def async_disconnect(self) -> None:
         """Close the session without changing any area."""

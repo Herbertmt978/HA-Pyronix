@@ -1,10 +1,14 @@
 import copy
+from datetime import timedelta
 import json
 import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 from pytest_homeassistant_custom_component.components.diagnostics import (
     get_diagnostics_for_config_entry,
 )
@@ -25,10 +29,13 @@ from custom_components.pyronix_homecontrol.panel_protocol import (
 )
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.util import dt as dt_util
 from tests.const import AUTH
-from tests.test_client import FakeHTTP, FakeSocket
+from tests.test_client import FakeHTTP, FakeSocket, SequencedHTTP
 
 DATA = {
     "areas": {
@@ -100,11 +107,61 @@ async def test_setup_offline_exposes_connection_controls_without_network(hass):
         assert all(s.state != "unavailable" for s in hass.states.async_all("button"))
 
 
-async def test_refresh_while_connected_keeps_the_live_state(hass):
-    entry = await setup(hass)
+async def test_refresh_while_connected_keeps_live_state_and_permitted_areas(hass):
+    entry = await setup(hass, online=False)
+    data = copy.deepcopy(DATA)
+    data["areas"][4] = {"name": "Unused", "value": 4, "status": "Cannot Set"}
+    publish(entry, data)
+    await hass.async_block_till_done()
     await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
     assert entry.runtime_data.last_update_success
     assert hass.states.get(area(hass)).state == "disarmed"
+    assert len(hass.states.async_all("alarm_control_panel")) == 4
+
+
+async def test_reconnect_never_replays_the_previous_session_state(hass):
+    entry = await setup(hass, online=False)
+    coordinator = entry.runtime_data
+    coordinator.client.http = SequencedHTTP(
+        FakeSocket(initial_value=1), FakeSocket(initial_value=0)
+    )
+    await coordinator.async_connect()
+    await hass.async_block_till_done()
+    entity = area(hass)
+    assert hass.states.get(entity).state == "armed_away"
+    await coordinator.async_disconnect()
+    await hass.async_block_till_done()
+    assert hass.states.get(entity).state == "unavailable"
+    assert coordinator.data["observed_at"] is None
+    assert coordinator.data["areas"][0] == {
+        "name": "Day Set",
+        "value": None,
+        "status": "Unknown",
+    }
+
+    seen = []
+    unsubscribe = async_track_state_change_event(
+        hass,
+        [entity],
+        callback(lambda event: seen.append(event.data["new_state"].state)),
+    )
+    await coordinator.async_connect()
+    await hass.async_block_till_done()
+    unsubscribe()
+    await coordinator.async_disconnect()
+    assert seen == ["disarmed"]
+
+
+async def test_removing_the_entry_deletes_its_stored_catalog(hass, hass_storage):
+    # Connecting queues a delayed catalogue save; removal straight away must still win.
+    entry = await setup(hass)
+    key = f"pyronix_homecontrol.{entry.entry_id}"
+    assert await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=5))
+    await hass.async_block_till_done()
+    assert key not in hass_storage
 
 
 async def test_home_assistant_stop_closes_the_session(hass):
@@ -156,11 +213,12 @@ async def test_connect_button_recovers_from_error_and_disconnect_stays_usable(ha
             "async_connect",
             new=AsyncMock(side_effect=ProtocolError("Panel busy")),
         ),
-        pytest.raises(HomeAssistantError, match="Panel busy"),
+        pytest.raises(HomeAssistantError, match="Panel busy") as failure,
     ):
         await hass.services.async_call(
             "button", "press", {"entity_id": connect_id}, blocking=True
         )
+    assert failure.value.translation_key == "connect_failed"
     assert hass.states.get(connect_id).state != "unavailable"
 
     async def connected():
@@ -291,23 +349,32 @@ async def test_uncertain_command_does_not_invent_disarmed_state_or_disable_live_
 
 
 @pytest.mark.parametrize(
-    ("error", "message"),
+    ("error", "key", "message"),
     [
-        (PanelBusyError("busy"), "Another panel command is in progress"),
-        (CommandUnconfirmedError(), "the command was not repeated"),
+        (
+            PanelBusyError("busy"),
+            "command_in_progress",
+            "Another panel command is in progress",
+        ),
+        (
+            CommandUnconfirmedError(),
+            "command_unconfirmed",
+            "the command was not repeated",
+        ),
         (
             ProtocolError("Panel user cannot control this area"),
-            "cannot control this area",
+            "command_failed",
+            "The panel command failed: Panel user cannot control this area",
         ),
     ],
 )
-async def test_command_failures_raise_translated_errors(hass, error, message):
+async def test_command_failures_raise_translated_errors(hass, error, key, message):
     entry = await setup(hass)
     with (
         patch.object(
             entry.runtime_data.client, "control", new=AsyncMock(side_effect=error)
         ),
-        pytest.raises(HomeAssistantError, match=message),
+        pytest.raises(HomeAssistantError, match=message) as failure,
     ):
         await hass.services.async_call(
             "alarm_control_panel",
@@ -315,6 +382,8 @@ async def test_command_failures_raise_translated_errors(hass, error, message):
             {"entity_id": area(hass), "code": "9876"},
             blocking=True,
         )
+    assert failure.value.translation_domain == "pyronix_homecontrol"
+    assert failure.value.translation_key == key
 
 
 async def test_failed_session_is_logged_once_and_recovery_logged(hass, caplog):
@@ -387,11 +456,14 @@ async def test_rejected_credentials_prompt_reauth_and_reload_with_new_ones(hass)
             "connect",
             new=AsyncMock(side_effect=AuthenticationError("Panel access was denied")),
         ),
-        pytest.raises(HomeAssistantError, match="rejected the saved credentials"),
+        pytest.raises(
+            HomeAssistantError, match="rejected the saved credentials"
+        ) as failure,
     ):
         await hass.services.async_call(
             "button", "press", {"entity_id": connect_id}, blocking=True
         )
+    assert failure.value.translation_key == "authentication_failed"
     await hass.async_block_till_done()
     flows = entry.async_get_active_flows(hass, {SOURCE_REAUTH})
     flow = next(iter(flows))
@@ -519,7 +591,9 @@ async def test_diagnostics_report_session_and_areas_without_credentials(
         "permissions_received",
         "areas",
     }
+    assert set(result["connection"]) == {"state", "detail", "idle_expires_at"}
     text = json.dumps(result)
+    assert all(json.dumps(value) not in text for value in AUTH.values())
     assert "fixture" not in text and AUTH["PanelId"] not in text
     assert entry.runtime_data.device_id not in text
 

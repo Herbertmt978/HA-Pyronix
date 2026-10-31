@@ -50,7 +50,11 @@ rules:
   log-when-unavailable: done
   parallel-updates: done
   reauthentication-flow: done
-  test-coverage: done
+  test-coverage:
+    status: todo
+    comment: >-
+      The Home Assistant modules have full branch coverage. The bundled protocol client
+      is at about 86% and would reach the threshold once it moves to its own library.
 
   # Gold
   devices: done

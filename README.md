@@ -75,7 +75,7 @@ Home Assistant 2026.9 or later is required.
 
 [![Open this repository in the Home Assistant Marketplace](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Herbertmt978&repository=HA-Pyronix&category=integration)
 
-The button opens the Marketplace on Home Assistant 2026.11 and later, and HACS on 2026.10.
+The button opens the Marketplace on Home Assistant 2026.11 and later. On 2026.9 and 2026.10 it opens HACS, which must already be installed.
 
 1. Select the button and confirm your Home Assistant address. If the repository is not listed yet, confirm adding it from the link.
 2. Select **Download**, then restart Home Assistant if asked. HACS always needs a restart; the Marketplace needs one only after an update.
@@ -95,19 +95,20 @@ entities remain.
 ## Connect your own alarm
 
 1. Install Python 3.11 or later on the computer running BlueStacks. The setup helper only uses Python's standard library.
-2. Sign in to **HomeControl 2.0** in BlueStacks.
-3. Enable **Android Debug Bridge** in BlueStacks settings. Leave root access off. Note its loopback address and port; these can differ between installations.
-4. Open your alarm system in HomeControl. Enter its user code and app password, then wait until its areas are visible.
-5. In HA, open your user profile's **Security** page and create a temporary **Long-lived access token** for setup.
-6. Open a terminal in the extracted repository and run the command below. Replace the system name, ADB port and HA address with your own values.
+2. On the same computer, download the **Source code (zip)** of the [latest release](https://github.com/Herbertmt978/HA-Pyronix/releases/latest) and extract it. The Marketplace and HACS install only the integration, not this setup helper.
+3. Sign in to **HomeControl 2.0** in BlueStacks.
+4. Enable **Android Debug Bridge** in BlueStacks settings. Leave root access off. Note its loopback address and port; these can differ between installations.
+5. Open your alarm system in HomeControl. Enter its user code and app password, then wait until its areas are visible.
+6. In HA, open your user profile's **Security** page and create a temporary **Long-lived access token** for setup.
+7. Open a terminal in the extracted folder and run the command below. Replace the system name, ADB port and HA address with your own values.
 
 ```powershell
 python tools/setup_from_adb.py --system-name "My alarm" --device "127.0.0.1:5555" --ha-url "http://homeassistant.local:8123"
 ```
 
-7. Enter the **Pyronix user code** and the temporary **HA access token** at the hidden prompts. Do not put either in the command itself.
-8. Close the live panel screen in HomeControl. Open **Settings → Devices & services → Pyronix HomeControl** in HA and press **Connect**. Check the area states before trying a control.
-9. Delete the temporary HA token. The integration does not need it after setup. You can close BlueStacks and turn its debugging option off again.
+8. Enter the **Pyronix user code** and the temporary **HA access token** at the hidden prompts. Do not put either in the command itself.
+9. Close the live panel screen in HomeControl. Open **Settings → Devices & services → Pyronix HomeControl** in HA and press **Connect**. Check the area states before trying a control.
+10. Delete the temporary HA token. The integration does not need it after setup. You can close BlueStacks and turn its debugging option off again.
 
 The helper looks for ADB on your PATH or in the usual BlueStacks installation folder. If necessary, add `--adb "C:\path\to\HD-Adb.exe"` to the command.
 
