@@ -1,0 +1,93 @@
+rules:
+  # Bronze
+  action-setup:
+    status: exempt
+    comment: The integration registers no actions of its own.
+  appropriate-polling:
+    status: exempt
+    comment: Nothing is polled; status arrives over the session the user opens.
+  brands: done
+  common-modules: done
+  config-flow-test-coverage: done
+  config-flow: done
+  dependency-transparency:
+    status: todo
+    comment: >-
+      The PyronixCloud client and panel protocol are bundled in client.py and
+      panel_protocol.py. A Core submission would first publish them as a PyPI library.
+  docs-actions:
+    status: exempt
+    comment: The integration registers no actions of its own.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
+  entity-event-setup: done
+  entity-unique-id: done
+  has-entity-name: done
+  runtime-data: done
+  test-before-configure:
+    status: exempt
+    comment: >-
+      The setup helper submits the details while the HomeControl app still holds the
+      panel's only live session, so a connection test would report the panel as busy.
+      The details are validated instead, and Connect reports any failure.
+  test-before-setup:
+    status: exempt
+    comment: >-
+      By design no connection is opened at startup; areas stay unavailable until the
+      user presses Connect.
+  unique-config-entry: done
+
+  # Silver
+  action-exceptions: done
+  config-entry-unloading: done
+  docs-configuration-parameters:
+    status: exempt
+    comment: There are no options.
+  docs-installation-parameters: done
+  entity-unavailable: done
+  integration-owner: done
+  log-when-unavailable: done
+  parallel-updates: done
+  reauthentication-flow: done
+  test-coverage: done
+
+  # Gold
+  devices: done
+  diagnostics: done
+  discovery-update-info:
+    status: exempt
+    comment: Panels are reached through PyronixCloud and cannot be discovered.
+  discovery:
+    status: exempt
+    comment: Panels are reached through PyronixCloud and cannot be discovered.
+  docs-data-update: done
+  docs-examples: todo
+  docs-known-limitations: done
+  docs-supported-devices: done
+  docs-supported-functions: done
+  docs-troubleshooting: done
+  docs-use-cases: todo
+  dynamic-devices:
+    status: exempt
+    comment: Each config entry is one panel; areas reported later are added as entities.
+  entity-category: done
+  entity-device-class: done
+  entity-disabled-by-default:
+    status: exempt
+    comment: Every entity is a primary control or the session state.
+  entity-translations: done
+  exception-translations: done
+  icon-translations: done
+  reconfiguration-flow: done
+  repair-issues:
+    status: exempt
+    comment: Rejected credentials raise a re-authentication flow; nothing else needs repair.
+  stale-devices:
+    status: exempt
+    comment: Each config entry is one panel device.
+
+  # Platinum
+  async-dependency: done
+  inject-websession: done
+  strict-typing: done

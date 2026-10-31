@@ -1,13 +1,13 @@
 import asyncio
+from collections import deque
 import hashlib
 import json
-from collections import deque
 from types import SimpleNamespace
 
 import aiohttp
-import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+import pytest
 
 from custom_components.pyronix_homecontrol.client import (
     AuthenticationError,
@@ -16,8 +16,12 @@ from custom_components.pyronix_homecontrol.client import (
     PanelClient,
     ProtocolError,
 )
-from custom_components.pyronix_homecontrol.panel_protocol import crypt_body, fixed_key, unwrap
-from tests.test_integration import AUTH
+from custom_components.pyronix_homecontrol.panel_protocol import (
+    crypt_body,
+    fixed_key,
+    unwrap,
+)
+from tests.const import AUTH
 from tests.test_protocol import panel_frame
 
 
@@ -43,7 +47,9 @@ class FakeSocket:
 
     def packet(self, header, body):
         self.seq += 1
-        return panel_frame(header, self.seq, body, self.key if header in "deg" else None)
+        return panel_frame(
+            header, self.seq, body, self.key if header in "deg" else None
+        )
 
     def area(self):
         return self.packet(
@@ -62,13 +68,17 @@ class FakeSocket:
             if b"<w>" in raw:
                 self.replies.put_nowait("<e>j never-log-this</e>")
             elif b"<a>" in raw:
-                self.replies.put_nowait("<e>b </e>" if self.mode == "busy" else "<e>u </e>")
+                self.replies.put_nowait(
+                    "<e>b </e>" if self.mode == "busy" else "<e>u </e>"
+                )
         elif raw[:1] == b"A":
             if self.mode == "handshake_timeout":
                 return
             self.replies.put_nowait(self.packet("a", b"\x01\x20" + b"12345678"))
         elif raw[:1] == b"B":
-            public = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), raw[6:-16])
+            public = ec.EllipticCurvePublicKey.from_encoded_point(
+                ec.SECP256R1(), raw[6:-16]
+            )
             shared = self.private.exchange(ec.ECDH(), public)
             panel_public = self.private.public_key().public_bytes(
                 serialization.Encoding.X962, serialization.PublicFormat.CompressedPoint
@@ -103,7 +113,7 @@ class FakeSocket:
                 self.command_sent.set()
                 self.value = 1 if body[:1] == b"-" else 0
                 if self.mode == "send_failure":
-                    raise ConnectionError()
+                    raise ConnectionError
                 if self.mode == "setting_ack":
                     self.value = 3
                 if self.mode == "closed_ack":
@@ -190,9 +200,11 @@ async def test_offline_control_never_opens_a_connection(make_client):
 
 
 @pytest.mark.parametrize(
-    "mode,error", [("busy", ProtocolError), ("bad_login", AuthenticationError)]
+    ("mode", "error"), [("busy", ProtocolError), ("bad_login", AuthenticationError)]
 )
-async def test_failed_connect_does_not_retry_and_can_be_disconnected(make_client, mode, error):
+async def test_failed_connect_does_not_retry_and_can_be_disconnected(
+    make_client, mode, error
+):
     client, wire, http = make_client(mode)
     with pytest.raises(error):
         await client.connect()
@@ -225,7 +237,9 @@ async def test_connect_timeout_is_bounded_and_releases_socket(make_client):
 
 async def test_disconnect_cancels_connect_promptly(make_client):
     connecting = asyncio.Event()
-    client, wire, http = make_client("handshake_timeout", on_state=lambda: connecting.set())
+    client, _wire, _http = make_client(
+        "handshake_timeout", on_state=lambda: connecting.set()
+    )
     request = asyncio.create_task(client.connect())
     await connecting.wait()
     await client.disconnect()
@@ -242,7 +256,9 @@ async def test_duplicate_connect_uses_existing_session(make_client):
 
 
 @pytest.mark.parametrize("mode", ["closed_ack", "send_failure"])
-async def test_lost_connection_after_write_never_reconnects_or_retries(make_client, mode):
+async def test_lost_connection_after_write_never_reconnects_or_retries(
+    make_client, mode
+):
     client, wire, http = make_client(mode)
     await client.connect()
     with pytest.raises(CommandUnconfirmedError):
@@ -283,7 +299,7 @@ async def test_stalled_write_is_bounded_and_never_repeated(make_client):
 
 
 async def test_setting_is_confirmed_before_exit_delay(make_client):
-    client, wire, http = make_client("setting_ack")
+    client, wire, _http = make_client("setting_ack")
     await client.connect()
     assert (await client.control("arm", 0))["areas"][0]["value"] == 3
     sequence = client._session.tx_sequence
@@ -317,8 +333,10 @@ async def test_cancelled_command_does_not_cancel_live_reader_or_resend(make_clie
     assert len(wire.commands) == 1 and http.connections == 1
 
 
-async def test_heartbeat_keeps_session_without_refreshing_user_idle_deadline(make_client):
-    client, wire, http = make_client()
+async def test_heartbeat_keeps_session_without_refreshing_user_idle_deadline(
+    make_client,
+):
+    client, wire, _http = make_client()
     client.HEARTBEAT_INTERVAL = 0.01
     await client.connect()
     deadline = client.idle_deadline
@@ -327,7 +345,7 @@ async def test_heartbeat_keeps_session_without_refreshing_user_idle_deadline(mak
 
 
 async def test_idle_session_closes_without_changing_alarm(make_client):
-    client, wire, http = make_client()
+    client, wire, _http = make_client()
     client.HEARTBEAT_INTERVAL = 0.01
     client.IDLE_TIMEOUT = 0.02
     await client.connect()

@@ -2,10 +2,10 @@ import hashlib
 import struct
 import xml.etree.ElementTree as ET
 
-import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+import pytest
 
 from custom_components.pyronix_homecontrol.panel_protocol import (
     FrameBuffer,
@@ -58,7 +58,9 @@ def test_handshake_login_and_status_with_independent_panel():
     client = PanelSession("12345678", "synthetic-password")
     assert unwrap(client.announce())[:5] == b"A\x01\x00\x00\x00"
     extra = b"test"
-    outgoing = client.handshake(panel_frame("a", 1, b"\x01\x83" + b"12345678" + extra + bytes(11)))
+    outgoing = client.handshake(
+        panel_frame("a", 1, b"\x01\x83" + b"12345678" + extra + bytes(11))
+    )
     own_public = ec.EllipticCurvePublicKey.from_encoded_point(
         ec.SECP256R1(), unwrap(outgoing)[6:-16]
     )
@@ -73,7 +75,10 @@ def test_handshake_login_and_status_with_independent_panel():
     assert client.handshake(panel_frame("b", 2, b"\x01" + panel_public)) is None
     assert client.key == expected_key
     login = unwrap(client.login("9876"))
-    assert crypt_body(expected_key, ord("D"), 6, 3, login[5:], decrypt=True)[:-16] == b",9876\n"
+    assert (
+        crypt_body(expected_key, ord("D"), 6, 3, login[5:], decrypt=True)[:-16]
+        == b",9876\n"
+    )
     status = panel_frame("d", 3, b'{"type":"status"}', expected_key)
     assert client.receive(status) == ("d", b'{"type":"status"}')
     with pytest.raises(ProtocolError, match="sequence"):
@@ -110,17 +115,17 @@ def test_streaming_transport_split_coalesced_and_cloud_frames():
 
 
 def test_cloud_operations_are_narrow_and_xml_escaped():
-    auth = dict(
-        AppUser="fixture&user",
-        PushId="test",
-        DeviceId="test",
-        PanelId="12345678",
-        SystemName="A < B",
-        PanelPwd="fixture",
-    )
-    doc = ET.fromstring(unwrap(cloud_message(auth, "connect")))
+    auth = {
+        "AppUser": "fixture&user",
+        "PushId": "test",
+        "DeviceId": "test",
+        "PanelId": "12345678",
+        "SystemName": "A < B",
+        "PanelPwd": "fixture",
+    }
+    doc = ET.fromstring(unwrap(cloud_message(auth, "connect")))  # noqa: S314
     assert doc.findtext("b") == "A < B"
-    assert set(x.tag for x in doc) == set("nuabziltmv") | {"c", "lang"}
+    assert {x.tag for x in doc} == set("nuabziltmv") | {"c", "lang"}
     for operation in ("arm", "disarm", "delete", "output", "save"):
         with pytest.raises(ProtocolError):
             cloud_message(auth, operation)

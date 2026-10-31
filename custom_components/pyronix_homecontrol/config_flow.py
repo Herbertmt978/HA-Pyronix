@@ -1,29 +1,46 @@
 """UI-managed connection details and credential rotation; no YAML configuration."""
 
+from collections.abc import Mapping
 import hashlib
 import json
+from typing import Any
 
-import voluptuous as vol
-from homeassistant import config_entries
-from homeassistant.helpers import selector
+import probatio
 
-from . import DOMAIN
-from .client import ProtocolError, validate_auth
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult
+from homeassistant.helpers.selector import (
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
-PASSWORD = selector.TextSelector(
-    selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+from .client import validate_auth
+from .const import DOMAIN
+from .panel_protocol import ProtocolError
+
+PASSWORD = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
+CREDENTIALS = probatio.Schema(
+    {
+        probatio.Required("app_password"): PASSWORD,
+        probatio.Required("user_code"): PASSWORD,
+    }
 )
 
 
-class PyronixConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class PyronixConfigFlow(ConfigFlow, domain=DOMAIN):
+    """Set up a panel from the connection details the setup helper prepares."""
+
     VERSION = 1
 
-    async def async_step_user(self, user_input=None):
-        errors = {}
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Accept the prepared connection details for one panel."""
+        errors: dict[str, str] = {}
         if user_input is not None:
             try:
                 auth = validate_auth(json.loads(user_input["connection_details"]))
-            except ValueError, KeyError, ProtocolError:
+            except ValueError, ProtocolError:
                 errors["base"] = "invalid_connection"
             else:
                 await self.async_set_unique_id(
@@ -33,39 +50,45 @@ class PyronixConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title=auth["SystemName"], data=auth)
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({vol.Required("connection_details"): PASSWORD}),
-            errors=errors,
-        )
-
-    async def async_step_reconfigure(self, user_input=None):
-        entry = self._get_reconfigure_entry()
-        errors = {}
-        if user_input is not None:
-            data = dict(entry.data)
-            data.update(PanelPwd=user_input["app_password"], UserCode=user_input["user_code"])
-            try:
-                validate_auth(data)
-            except ProtocolError:
-                errors["base"] = "invalid_connection"
-            else:
-                return self.async_update_reload_and_abort(entry, data_updates=data)
-        return self.async_show_form(
-            step_id="reconfigure",
-            data_schema=vol.Schema(
-                {vol.Required("app_password"): PASSWORD, vol.Required("user_code"): PASSWORD}
+            data_schema=probatio.Schema(
+                {probatio.Required("connection_details"): PASSWORD}
             ),
             errors=errors,
         )
 
-    async def async_step_reauth(self, entry_data):
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change the app password or user code."""
+        return self._update_credentials(
+            "reconfigure", self._get_reconfigure_entry(), user_input
+        )
+
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
+        """Ask for credentials after the panel rejected the saved ones."""
         return await self.async_step_reauth_confirm()
 
-    async def async_step_reauth_confirm(self, user_input=None):
-        entry = self._get_reauth_entry()
-        errors = {}
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Accept the current app password and user code."""
+        return self._update_credentials(
+            "reauth_confirm", self._get_reauth_entry(), user_input
+        )
+
+    def _update_credentials(
+        self, step_id: str, entry: ConfigEntry, user_input: dict[str, Any] | None
+    ) -> ConfigFlowResult:
+        # Only the app password and user code change; the panel identity stays fixed.
+        errors: dict[str, str] = {}
         if user_input is not None:
-            data = dict(entry.data)
-            data.update(PanelPwd=user_input["app_password"], UserCode=user_input["user_code"])
+            data = {
+                **entry.data,
+                "PanelPwd": user_input["app_password"],
+                "UserCode": user_input["user_code"],
+            }
             try:
                 validate_auth(data)
             except ProtocolError:
@@ -73,9 +96,5 @@ class PyronixConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 return self.async_update_reload_and_abort(entry, data_updates=data)
         return self.async_show_form(
-            step_id="reauth_confirm",
-            data_schema=vol.Schema(
-                {vol.Required("app_password"): PASSWORD, vol.Required("user_code"): PASSWORD}
-            ),
-            errors=errors,
+            step_id=step_id, data_schema=CREDENTIALS, errors=errors
         )

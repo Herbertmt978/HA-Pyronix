@@ -6,10 +6,12 @@ server is stopped on exit. Android root access is neither requested nor used.
 
 import argparse
 import base64
+import contextlib
 import getpass
 import ipaddress
 import json
 import os
+from pathlib import Path
 import re
 import shutil
 import socket
@@ -20,7 +22,6 @@ import urllib.parse
 import urllib.request
 import warnings
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
 PACKAGE = "com.pyronixhc2.android.app"
 FIELD_MAP = {
@@ -63,7 +64,9 @@ def private_input(prompt):
 
 def extract_connection(log, system_name):
     candidates = []
-    for match in re.finditer(r"webSocketwriteString message sent:\s*\((.*?)\)", log, re.S):
+    for match in re.finditer(
+        r"webSocketwriteString message sent:\s*\((.*?)\)", log, re.DOTALL
+    ):
         frame = match.group(1).strip()
         if not frame.startswith("<p>"):
             try:
@@ -71,13 +74,15 @@ def extract_connection(log, system_name):
             except (ValueError, UnicodeError):
                 continue
         try:
-            root = ET.fromstring(frame)
+            root = ET.fromstring(frame)  # noqa: S314 - the owner's own app log
         except ET.ParseError:
             continue
         if root.tag != "p":
             continue
         fields = {child.tag: child.text or "" for child in root}
-        if fields.get("b") == system_name and all(fields.get(k) for k in ("n", "u", "i", "a", "z")):
+        if fields.get("b") == system_name and all(
+            fields.get(k) for k in ("n", "u", "i", "a", "z")
+        ):
             candidates.append(
                 {dest: fields[src] for src, dest in FIELD_MAP.items() if src in fields}
             )
@@ -98,7 +103,9 @@ def validate_url(value):
         or parsed.query
         or parsed.fragment
     ):
-        raise SetupError("Use your Home Assistant base URL, without a token or login details.")
+        raise SetupError(
+            "Use your Home Assistant base URL, without a token or login details."
+        )
     if parsed.path not in ("", "/"):
         raise SetupError("Use the base URL without a dashboard path.")
     if parsed.scheme == "http":
@@ -117,7 +124,8 @@ def find_adb(value):
     if candidate and Path(candidate).is_file():
         return str(Path(candidate))
     bluestacks = (
-        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "BlueStacks_nxt/HD-Adb.exe"
+        Path(os.environ.get("PROGRAMFILES", r"C:\Program Files"))
+        / "BlueStacks_nxt/HD-Adb.exe"
     )
     if bluestacks.is_file():
         return str(bluestacks)
@@ -138,6 +146,7 @@ class PrivateADB:
         result = subprocess.run(
             command,
             capture_output=True,
+            check=False,
             timeout=25,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
         )
@@ -146,7 +155,9 @@ class PrivateADB:
                 "ADB failed. Check that debugging is enabled and the device address is correct."
             )
         if len(result.stdout) > 16 * 1024 * 1024:
-            raise SetupError("The app log is too large. Reopen HomeControl and try again.")
+            raise SetupError(
+                "The app log is too large. Reopen HomeControl and try again."
+            )
         return result.stdout.decode(errors="replace")
 
     def __enter__(self):
@@ -164,16 +175,16 @@ class PrivateADB:
 
     def __exit__(self, *args):
         if self.port is not None:
-            try:
+            with contextlib.suppress(SetupError, subprocess.TimeoutExpired):
                 self.run("kill-server")
-            except (SetupError, subprocess.TimeoutExpired):
-                pass
 
     def read_homecontrol(self):
         pid = self.run("shell", "pidof", PACKAGE, device=True).strip()
         if not re.fullmatch(r"\d+", pid):
             raise SetupError("Open HomeControl 2.0 before running this helper.")
-        return self.run("logcat", "--pid=" + pid, "-d", "-v", "raw", "-t", "10000", device=True)
+        return self.run(
+            "logcat", "--pid=" + pid, "-d", "-v", "raw", "-t", "10000", device=True
+        )
 
 
 def configure_ha(base, token, details):
@@ -183,7 +194,10 @@ def configure_ha(base, token, details):
         request = urllib.request.Request(
             base + path,
             json.dumps(body).encode(),
-            headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"},
+            headers={
+                "Authorization": "Bearer " + token,
+                "Content-Type": "application/json",
+            },
         )
         try:
             with opener.open(request, timeout=30) as response:
@@ -222,7 +236,9 @@ def main():
         "--system-name", required=True, help="Exact system name shown in HomeControl"
     )
     parser.add_argument(
-        "--device", required=True, help="ADB device serial, or BlueStacks loopback address and port"
+        "--device",
+        required=True,
+        help="ADB device serial, or BlueStacks loopback address and port",
     )
     parser.add_argument("--ha-url", required=True, help="Home Assistant base URL")
     parser.add_argument("--adb", help="Path to adb or BlueStacks HD-Adb.exe")
@@ -251,7 +267,7 @@ if __name__ == "__main__":
     except (KeyboardInterrupt, EOFError):
         print("Setup cancelled.", file=sys.stderr)
         raise SystemExit(1) from None
-    except Exception:
+    except Exception:  # noqa: BLE001 - a traceback could reveal connection details
         print(
             "Setup failed. No credentials were saved. Check the app, ADB and HA connection.",
             file=sys.stderr,

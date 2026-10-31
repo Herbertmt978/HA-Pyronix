@@ -1,14 +1,14 @@
 {
   "domain": "pyronix_homecontrol",
   "name": "Pyronix HomeControl",
-  "version": "0.2.0",
-  "config_flow": true,
-  "integration_type": "hub",
-  "iot_class": "cloud_push",
   "codeowners": [
     "@Herbertmt978"
   ],
-  "requirements": [],
+  "config_flow": true,
   "documentation": "https://github.com/Herbertmt978/HA-Pyronix",
-  "issue_tracker": "https://github.com/Herbertmt978/HA-Pyronix/issues"
+  "integration_type": "hub",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/Herbertmt978/HA-Pyronix/issues",
+  "requirements": [],
+  "version": "0.3.0"
 }

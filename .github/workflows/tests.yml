@@ -1,0 +1,57 @@
+---
+name: Tests
+
+"on":
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Home Assistant ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # hacs.json declares this minimum; requirements-dev.txt pins the current release.
+          - name: 2026.9 minimum
+            harness: "0.13.364"
+          - name: current
+            harness: ""
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install test dependencies
+        run: python -m pip install --requirement requirements-dev.txt
+
+      - name: Use the minimum Home Assistant test harness
+        if: matrix.harness != ''
+        run: python -m pip install "pytest-homeassistant-custom-component==${{ matrix.harness }}"
+
+      - name: Run Ruff
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Check strict typing
+        if: matrix.harness == ''
+        run: python -m mypy
+
+      - name: Run tests
+        run: python -m pytest -q --cov=custom_components.pyronix_homecontrol --cov-branch --cov-report=term-missing
+
+      # The bundled protocol client has its own unit tests; Core rules cover the HA layer.
+      - name: Check Home Assistant layer coverage
+        run: python -m coverage report --omit="*/client.py,*/panel_protocol.py" --fail-under=95

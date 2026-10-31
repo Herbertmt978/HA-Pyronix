@@ -6,8 +6,13 @@
 
 Connect to your Pyronix alarm through Home Assistant without leaving BlueStacks running.
 
+[![HACS custom repository](https://img.shields.io/badge/HACS-Custom-41BDF5?logo=home-assistant&logoColor=white)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Herbertmt978&repository=HA-Pyronix&category=integration)
+[![Latest release](https://img.shields.io/github/v/release/Herbertmt978/HA-Pyronix?display_name=tag&sort=semver)](https://github.com/Herbertmt978/HA-Pyronix/releases/latest)
+[![Tests](https://github.com/Herbertmt978/HA-Pyronix/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/Herbertmt978/HA-Pyronix/actions/workflows/tests.yml)
+![Home Assistant 2026.9+](https://img.shields.io/badge/Home%20Assistant-2026.9%2B-18BCF2?logo=home-assistant&logoColor=white)
 [![Licence: MIT](https://img.shields.io/badge/Licence-MIT-0F766E.svg)](LICENSE)
-[![Home Assistant custom integration](https://img.shields.io/badge/Home%20Assistant-Custom%20integration-0EA5E9?logo=home-assistant&logoColor=white)](#install-the-integration)
+
+[![Open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Herbertmt978&repository=HA-Pyronix&category=integration)
 
 [How it works](#what-it-does) | [Install](#install-the-integration) | [Set up](#connect-your-own-alarm) | [Safety and limits](#safety-and-limits) | [Troubleshooting](#if-something-goes-wrong) | [Development](#development)
 
@@ -65,13 +70,28 @@ another setup method.
 
 ## Install the integration
 
-1. Download this repository using **Code → Download ZIP**, then extract it.
+Home Assistant 2026.9 or later is required.
+
+### With HACS
+
+[![Open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Herbertmt978&repository=HA-Pyronix&category=integration)
+
+1. Select the button above and confirm your Home Assistant address. If HACS does not list the repository yet, confirm adding it as a custom repository.
+2. Select **Download**, then restart Home Assistant.
+
+To add it by hand instead, open **HACS → ⋮ → Custom repositories**, add
+`https://github.com/Herbertmt978/HA-Pyronix` with the type **Integration**, then
+download **Pyronix HomeControl**. HACS offers later releases as updates.
+
+### Manual installation
+
+1. Download the source code ZIP from the [latest release](https://github.com/Herbertmt978/HA-Pyronix/releases/latest), then extract it.
 2. Copy `custom_components/pyronix_homecontrol` into your HA `/config/custom_components/` folder. The result should include `/config/custom_components/pyronix_homecontrol/manifest.json`.
 3. Restart Home Assistant.
 
-This is a manual installation; there is no HACS release. Tests cover Home
-Assistant 2026.7.1 and 2026.9.1 fixtures, with import and startup checks on a
-development system.
+To move a manual installation to HACS, download the integration through HACS and
+restart. HACS replaces the same folder; the existing configuration and entities
+remain.
 
 ## Connect your own alarm
 
@@ -107,10 +127,20 @@ The panel may refuse to arm when a detector is open or a fault needs attention. 
 - **Integration unavailable:** restart HA after copying the files. Check that the folder was not nested twice.
 - **Panel busy or offline:** close the live panel screen in the phone app and check its network connection. Press **Connect** to try again. Press **Disconnect** in HA before opening a live connection in the phone app.
 - **Reconnecting immediately fails:** the cloud has sometimes reported that the panel is not polling immediately after Disconnect, then accepted a connection about 35 seconds later. Wait briefly and press **Connect** again. The buttons remain available after an error.
-- **Credentials changed:** use **Reconfigure** on the integration and enter the new app password and user code.
+- **Credentials changed:** use **Reconfigure** on the integration and enter the new app password and user code. If the panel rejects the saved credentials during Connect, HA also shows a re-authentication prompt for the same details.
 - **Command timed out:** check the real panel or app before trying again. A timeout does not prove the command failed.
 
 Do not upload app logs, access tokens, connection details or HA backups to an issue. A description of the problem, versions and the fixed error message is enough to start.
+
+For more detail, open the integration, select **⋮ → Download diagnostics**, and attach the file after reading it. It contains the connection state and fixed error message, idle expiry, HomeControl app version, panel firmware, the time of the last panel update, and each permitted area's name, status and arm/disarm permission. It does not contain the app password, user code, panel ID, account or device identifiers, or raw panel records.
+
+## Remove the integration
+
+1. Press **Disconnect** if a session is open.
+2. Open **Settings → Devices & services → Pyronix HomeControl**, select **⋮ → Delete**, and confirm. This removes the stored connection details and entities; it does not change the alarm.
+3. If you installed through HACS, remove the repository from HACS as well. For a manual installation, delete `/config/custom_components/pyronix_homecontrol` and restart Home Assistant.
+
+Nothing needs removing from PyronixCloud or the HomeControl app.
 
 ## Development
 
@@ -125,7 +155,9 @@ ruff format --check .
 pytest -q
 ```
 
-The tests use synthetic credentials and a simulated panel. They cover the encrypted handshake, fragmented messages, area permissions, HA services, wrong codes, lost acknowledgements, live updates, heartbeats, idle expiry and connection controls while offline. They do not arm a real alarm.
+The tests use synthetic credentials and a simulated panel. They cover the encrypted handshake, fragmented messages, area permissions, HA services, wrong codes, lost acknowledgements, live updates, heartbeats, idle expiry, connection controls while offline, re-authentication, reconfiguration and diagnostics. They do not arm a real alarm.
+
+`requirements-dev.txt` pins the current Home Assistant test harness. GitHub Actions also runs the suite against Home Assistant 2026.9, the minimum declared in `hacs.json`, checks strict typing with mypy, and validates the repository with HACS and Hassfest.
 
 This project is available under the [MIT licence](LICENSE). For bugs, use
 [GitHub Issues](https://github.com/Herbertmt978/HA-Pyronix/issues)
