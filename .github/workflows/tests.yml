@@ -49,9 +49,6 @@ jobs:
         if: matrix.harness == ''
         run: python -m mypy
 
+      # The protocol client is tested in aiopyronix; this covers every integration module.
       - name: Run tests
-        run: python -m pytest -q --cov=custom_components.pyronix_homecontrol --cov-branch --cov-report=term-missing
-
-      # The bundled protocol client has its own unit tests; Core rules cover the HA layer.
-      - name: Check Home Assistant layer coverage
-        run: python -m coverage report --omit="*/client.py,*/panel_protocol.py" --fail-under=95
+        run: python -m pytest -q --cov=custom_components.pyronix_homecontrol --cov-branch --cov-report=term-missing --cov-fail-under=95

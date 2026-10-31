@@ -5,6 +5,7 @@ import hashlib
 import json
 from typing import Any
 
+from aiopyronix import ProtocolError, validate_auth
 import probatio
 
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult
@@ -14,9 +15,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
-from .client import validate_auth
 from .const import DOMAIN
-from .panel_protocol import ProtocolError
 
 PASSWORD = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 CREDENTIALS = probatio.Schema(

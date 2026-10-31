@@ -4,6 +4,12 @@ import json
 import time
 from unittest.mock import AsyncMock, patch
 
+from aiopyronix import (
+    AuthenticationError,
+    CommandUnconfirmedError,
+    PanelBusyError,
+    ProtocolError,
+)
 import pytest
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -13,20 +19,7 @@ from pytest_homeassistant_custom_component.components.diagnostics import (
     get_diagnostics_for_config_entry,
 )
 
-from custom_components.pyronix_homecontrol.client import (
-    AuthenticationError,
-    CommandUnconfirmedError,
-    PanelBusyError,
-    ProtocolError,
-    control_frame,
-    ingest,
-    validate_auth,
-)
-from custom_components.pyronix_homecontrol.panel_protocol import (
-    PanelSession,
-    crypt_body,
-    unwrap,
-)
+from custom_components.pyronix_homecontrol.const import DOMAIN
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import callback
@@ -35,7 +28,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util import dt as dt_util
 from tests.const import AUTH
-from tests.test_client import FakeHTTP, FakeSocket, SequencedHTTP
+from tests.fake_panel import FakeHTTP, FakeSocket, SequencedHTTP
 
 DATA = {
     "areas": {
@@ -59,7 +52,7 @@ def enable_custom(enable_custom_integrations):
 
 async def setup(hass, online=True, saved=None):
     entry = MockConfigEntry(
-        domain="pyronix_homecontrol",
+        domain=DOMAIN,
         title="Test Panel",
         data=AUTH,
         unique_id="test-panel",
@@ -382,7 +375,7 @@ async def test_command_failures_raise_translated_errors(hass, error, key, messag
             {"entity_id": area(hass), "code": "9876"},
             blocking=True,
         )
-    assert failure.value.translation_domain == "pyronix_homecontrol"
+    assert failure.value.translation_domain == DOMAIN
     assert failure.value.translation_key == key
 
 
@@ -418,7 +411,7 @@ async def test_live_status_mapping_without_polling(hass, value, status, expected
 
 async def test_ui_config_flow_and_duplicate(hass):
     first = await hass.config_entries.flow.async_init(
-        "pyronix_homecontrol", context={"source": "user"}
+        DOMAIN, context={"source": "user"}
     )
     assert first["type"] == "form"
     bad = await hass.config_entries.flow.async_configure(
@@ -435,7 +428,7 @@ async def test_ui_config_flow_and_duplicate(hass):
     assert result["data"]["UserCode"] == "9876"
     await hass.async_block_till_done()
     second = await hass.config_entries.flow.async_init(
-        "pyronix_homecontrol", context={"source": "user"}
+        DOMAIN, context={"source": "user"}
     )
     result = await hass.config_entries.flow.async_configure(
         second["flow_id"], {"connection_details": json.dumps(AUTH)}
@@ -553,7 +546,7 @@ async def test_panel_firmware_upgrade_updates_existing_device(hass):
     entry = await setup(hass, online=False, saved=catalog)
     registry = dr.async_get(hass)
     [device] = dr.async_entries_for_config_entry(registry, entry.entry_id)
-    assert device.identifiers == {("pyronix_homecontrol", entry.runtime_data.device_id)}
+    assert device.identifiers == {(DOMAIN, entry.runtime_data.device_id)}
     assert device.sw_version == "2.10"
     publish(entry, DATA)
     await hass.async_block_till_done()
@@ -596,68 +589,3 @@ async def test_diagnostics_report_session_and_areas_without_credentials(
     assert all(json.dumps(value) not in text for value in AUTH.values())
     assert "fixture" not in text and AUTH["PanelId"] not in text
     assert entry.runtime_data.device_id not in text
-
-
-def test_command_wire_ids_and_permission_bounds():
-    session = PanelSession("12345678", "fixture")
-    session.phase = "data"
-    session.key = bytes(16)
-    for operation, expected in [("arm", b"-\x01\x02"), ("disarm", b"/\x01\x02")]:
-        raw = unwrap(control_frame(session, operation, 2, DATA))
-        assert (
-            crypt_body(
-                session.key, ord("D"), 3, session.tx_sequence, raw[5:], decrypt=True
-            )[:-16]
-            == expected
-        )
-    for operation, area in [
-        ("arm", 4),
-        ("disarm", 255),
-        ("omit", 0),
-        ("arm", -1),
-        ("arm", True),
-    ]:
-        with pytest.raises(ProtocolError):
-            control_frame(session, operation, area, DATA)
-    snapshot = copy.deepcopy(DATA)
-    snapshot["areas"][2]["value"] = 5
-    with pytest.raises(ProtocolError):
-        control_frame(session, "arm", 2, snapshot)
-
-
-def test_status_retains_only_needed_fields_and_credentials_are_narrow():
-    snapshot = {
-        "areas": {},
-        "can_arm": set(),
-        "can_disarm": set(),
-        "permissions_received": False,
-    }
-    ingest(
-        snapshot,
-        {
-            "type": "area",
-            "Detail": [
-                {
-                    "R": 0,
-                    "N": "Day Set",
-                    "V": 0,
-                    "LastSet": {"U": "private-person"},
-                    "S": "arbitrary",
-                }
-            ],
-        },
-    )
-    assert snapshot["areas"][0] == {"name": "Day Set", "value": 0, "status": "Unset"}
-    ingest(
-        snapshot,
-        {
-            "type": "user",
-            "U": "private-person",
-            "SetAreas": {"R": [0]},
-            "UnsetAreas": {"R": [0]},
-        },
-    )
-    assert "private-person" not in repr(snapshot)
-    assert "unrelated_secret" not in validate_auth(
-        {**AUTH, "unrelated_secret": "never-keep"}
-    )

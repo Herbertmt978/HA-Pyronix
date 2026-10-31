@@ -1,15 +1,15 @@
 """Connection controls remain available when the alarm areas are unavailable."""
 
+from aiopyronix import AuthenticationError, ProtocolError
+
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .client import AuthenticationError
 from .const import DOMAIN
 from .coordinator import PanelCoordinator, PyronixConfigEntry
 from .entity import PyronixEntity
-from .panel_protocol import ProtocolError
 
 PARALLEL_UPDATES = 0
 

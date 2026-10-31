@@ -13,8 +13,9 @@ rules:
   dependency-transparency:
     status: todo
     comment: >-
-      The PyronixCloud client and panel protocol are bundled in client.py and
-      panel_protocol.py. A Core submission would first publish them as a PyPI library.
+      The PyronixCloud client and panel protocol now live in the MIT-licensed aiopyronix
+      library. This becomes done once 0.1.0 is published to PyPI from its public CI
+      release workflow, matching a tagged GitHub release.
   docs-actions:
     status: exempt
     comment: The integration registers no actions of its own.
@@ -50,11 +51,7 @@ rules:
   log-when-unavailable: done
   parallel-updates: done
   reauthentication-flow: done
-  test-coverage:
-    status: todo
-    comment: >-
-      The Home Assistant modules have full branch coverage. The bundled protocol client
-      is at about 86% and would reach the threshold once it moves to its own library.
+  test-coverage: done
 
   # Gold
   devices: done
