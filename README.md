@@ -24,11 +24,11 @@ session with the alarm panel. It exposes each area as a Home Assistant alarm
 control panel, with explicit Connect and Disconnect buttons. BlueStacks is used
 only to obtain setup details from your own signed-in HomeControl 2.0 app.
 
-The project is at an early stage. A real login and area status reads have been
-verified with HomeControl 2.0 app **6.3.0** and panel firmware **2.11**. Arming
-has worked on the maintainer's panel. The current connection flow and disarming
-still need a physical user trial; automated control tests use a simulated panel.
-Compatibility with other panels and app versions is unconfirmed.
+The full flow has been verified on a real panel with HomeControl 2.0 app **6.3.0**
+and panel firmware **2.11**: Connect, live area states, arming an area, disarming
+it, reconnecting and Disconnect, last checked with version 0.4.0 on 2 November 2026.
+Automated tests use a simulated panel. Compatibility with other panels and app
+versions is unconfirmed.
 
 ## What it does
 
@@ -42,7 +42,7 @@ The same connection carries status updates and commands. There is no background 
 
 The area named `Night Set` uses Home Assistant's **Arm night** action. Other areas use **Arm away**. Each action applies only to that area. There is no “arm everything” action, forced omissions, outputs or installer settings.
 
-Home Assistant waits for a panel response before reporting success. **Setting** appears as **Arming**, with later status arriving over the open connection. If a command is not confirmed within 25 seconds, Home Assistant reports an uncertain outcome. A late response can still update the displayed state. The integration never repeats an arm or disarm command automatically, even after a lost connection. Check the real panel before trying again.
+Home Assistant waits for a panel response before reporting success. **Setting** appears as **Arming** while the panel runs its exit delay, which took about 30–40 seconds on the verified panel; the armed state then arrives over the open connection. If a command is not confirmed within 25 seconds, Home Assistant reports an uncertain outcome. A late response can still update the displayed state. The integration never repeats an arm or disarm command automatically, even after a lost connection. Check the real panel before trying again.
 
 An unfamiliar panel state appears as unknown. “Cannot Set” and “Can Override” mean an area is disarmed but cannot be armed normally. The reason appears in its `panel_status` attribute, and arming is refused while either state is present.
 
